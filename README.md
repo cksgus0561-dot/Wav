@@ -4,7 +4,11 @@ WAV의 선택 구간을 푸리에 성분으로 분해하고, 성분의 합이 �
 
 ## 실행
 
-`Wave Curves.html`을 더블클릭하면 브라우저에서 바로 실행됩니다. 이 파일에는 코드와 스타일이 모두 포함되어 있어 다른 폴더로 복사해서 사용할 수도 있습니다.
+**[실행용 HTML 다운로드](https://github.com/cksgus0561-dot/Wav/releases/latest/download/Wave-Curves.html)** · **[ZIP 다운로드](https://github.com/cksgus0561-dot/Wav/releases/latest/download/Wave-Curves.zip)**
+
+`Wave-Curves.html` 하나에 코드·스타일·100초 예제가 모두 포함되어 있습니다. 다운로드한 HTML을 브라우저로 열면 됩니다. ZIP에는 같은 HTML 파일 하나가 들어 있습니다.
+
+저장소의 `Wave Curves.html`도 동일한 단독 실행 파일입니다. `index.html`과 GitHub가 자동으로 제공하는 `Source code` 압축파일은 개발용 소스이며, `index.html`만 내려받아서는 실행되지 않습니다.
 
 개발 시에는 Node.js 22 이상에서 `npm start`로 로컬 서버를 실행하고 <http://127.0.0.1:4173>에 접속합니다. 소스 수정 후 `npm run build`로 독립 HTML을 다시 생성합니다. `npm test`로 수학 및 WAV 디코딩 검증을 실행합니다. 외부 패키지 설치나 인터넷 연결은 필요하지 않습니다.
 
