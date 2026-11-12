@@ -191,6 +191,57 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: '.verification/arbitrary-length-mobile.png', fullPage: true });
 
+  // A full 16 ms revolution may finish between display frames at 1x.
+  // Inspect actual canvas pixels with all guides off: the trace must survive
+  // wrapping to phase zero, including multiple revolutions in one frame.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await control('file').setInputFiles({
+    name: 'fast-circle.wav', mimeType: 'audio/wav',
+    buffer: wavFixture({ encoding: 3, bits: 64, sampleRate, frames: 1536,
+      value: frame => 0.6 * Math.cos(2 * Math.PI * frame / 768) })
+  });
+  await page.waitForFunction(() => document.querySelector('.file-name').textContent === 'fast-circle.wav');
+  await setNumber('duration', 0.016);
+  await control('count').fill('1');
+  for (const name of ['preview', 'circles', 'vectors']) await control(name).uncheck();
+  const yellowPixels = () => page.evaluate(() => {
+    const canvas = document.querySelector('.curve-canvas');
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index] > 170 && pixels[index + 1] > 130 && pixels[index + 2] < 180) count++;
+    }
+    return count;
+  });
+  await page.locator('[data-action="restart"]').click();
+  await tick(0);
+  assert.ok(await yellowPixels() < 100);
+  await setSpeed('1');
+  await play();
+  checkPoint(await tick(16), 0, 62.5);
+  const completePixels = await yellowPixels();
+  assert.ok(completePixels > 1000, `complete trace missing: ${completePixels} yellow pixels`);
+  checkPoint(await tick(48), 0, 62.5);
+  assert.ok(await yellowPixels() >= completePixels * 0.95);
+  checkPoint(await tick(8), 0.008, 62.5);
+  assert.ok(await yellowPixels() >= completePixels * 0.95);
+  await pause();
+  await tick(1000);
+  assert.ok(await yellowPixels() >= completePixels * 0.95);
+  await page.locator('[data-action="restart"]').click();
+  await tick(0);
+  assert.ok(await yellowPixels() < 100);
+  await control('phase').fill('500');
+  await tick(0);
+  const halfPixels = await yellowPixels();
+  assert.ok(halfPixels > completePixels * 0.4 && halfPixels < completePixels * 0.6);
+  await control('phase').fill('1000');
+  await tick(0);
+  assert.ok(await yellowPixels() >= completePixels * 0.95);
+  await control('count').fill('2');
+  await tick(0);
+  assert.ok(await yellowPixels() < 100, 'changing the synthesis must reset the old trace');
+
   await control('file').setInputFiles({
     name: 'one-sample.wav', mimeType: 'audio/wav',
     buffer: wavFixture({ encoding: 3, bits: 64, sampleRate, frames: 1, value: () => 0.25 })

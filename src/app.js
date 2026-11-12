@@ -82,6 +82,7 @@ export function mountWaveCurves(root) {
   let centerY = 0;
   let radius = 1;
   let sourceTime = 0;
+  let traceComplete = false;
   let playbackRate = Number(controls.speed.value);
   let playing = true;
   let previousTime = performance.now();
@@ -190,6 +191,7 @@ export function mountWaveCurves(root) {
     if (totalEnergy < 1e-24) query('.load-status').textContent = '선택 구간이 무음입니다. 곡선은 한 점입니다.';
     else query('.load-status').textContent = '분석 완료';
     sourceTime = 0;
+    traceComplete = false;
     previousTime = performance.now();
     controls.phase.value = '0';
   }
@@ -372,7 +374,11 @@ export function mountWaveCurves(root) {
     previousTime = now;
     if (playing && analysis && !document.hidden && !query('.source-controls').disabled) {
       const duration = analysis.length / analysis.sampleRate;
-      sourceTime = (sourceTime + elapsedSeconds * playbackRate) % duration;
+      const nextTime = sourceTime + elapsedSeconds * playbackRate;
+      // A complete revolution can happen between two rendered frames.
+      // Preserve its trace even when the current phase wraps back to zero.
+      if (nextTime >= duration) traceComplete = true;
+      sourceTime = nextTime % duration;
     }
   }
   function togglePlay() {
@@ -414,12 +420,14 @@ export function mountWaveCurves(root) {
   listen(document, 'visibilitychange', () => { previousTime = performance.now(); });
   listen(query('[data-action="restart"]'), 'click', () => {
     sourceTime = 0;
+    traceComplete = false;
     previousTime = performance.now();
     controls.phase.value = '0';
   });
   listen(controls.phase, 'input', () => {
     if (!analysis) return;
     sourceTime = Number(controls.phase.value) / 1000 * analysis.length / analysis.sampleRate;
+    traceComplete = Number(controls.phase.value) === 1000;
     previousTime = performance.now();
     playing = false;
     updatePlay();
@@ -513,14 +521,18 @@ export function mountWaveCurves(root) {
         context.strokeStyle = '#c7d6dc9c';
         context.stroke(chain);
       }
-      const end = Math.floor(phase * (curve.length - 1));
-      context.beginPath();
-      context.moveTo(curve.real[0], curve.imaginary[0]);
-      for (let index = 1; index <= end; index++) context.lineTo(curve.real[index], curve.imaginary[index]);
-      context.lineTo(x, y);
       context.strokeStyle = '#f2d875';
       context.lineWidth = 1.6 / scale;
-      context.stroke();
+      if (traceComplete) {
+        context.stroke(outline);
+      } else {
+        const end = Math.floor(phase * curve.length);
+        context.beginPath();
+        context.moveTo(curve.real[0], curve.imaginary[0]);
+        for (let index = 1; index <= end; index++) context.lineTo(curve.real[index], curve.imaginary[index]);
+        context.lineTo(x, y);
+        context.stroke();
+      }
       context.fillStyle = '#fff4bc';
       context.beginPath();
       context.arc(x, y, 3.2 / scale, 0, TAU);
