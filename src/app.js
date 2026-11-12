@@ -294,7 +294,7 @@ export function mountWaveCurves(root) {
       return readWav(await file.arrayBuffer());
     }, file.name);
   });
-  listen(query('[data-action="demo"]'), 'click', () => loadDataset(() => makeDemo(), '합성 파동 · 예제', true));
+  listen(query('[data-action="demo"]'), 'click', () => loadDataset(() => makeDemo(), '합성 파동 · 100초 예제', true));
   listen(controls.channel, 'change', async () => {
     const selected = Number(controls.channel.value);
     const sequence = ++loadSequence;
@@ -591,7 +591,7 @@ export function mountWaveCurves(root) {
   observer.observe(query('.waveform-wrap'));
   fitCanvas(canvas);
   frameId = requestAnimationFrame(render);
-  loadDataset(() => makeDemo(), '합성 파동 · 예제', true);
+  loadDataset(() => makeDemo(), '합성 파동 · 100초 예제', true);
   return {
     destroy() {
       disposed = true;

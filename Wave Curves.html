@@ -350,14 +350,12 @@ function readWav(buffer) {
 
 function makeDemo() {
   const sampleRate = 48000;
-  const period = 2048;
   return {
     channels: 1, sampleRate, bits: 32, encoding: 3,
-    frames: sampleRate * 2, duration: 2,
+    frames: sampleRate * 100, duration: 100,
     sample(frame) {
-      const angle = frame * 2 * Math.PI / period;
-      return 0.48 * Math.cos(3 * angle) + 0.24 * Math.cos(7 * angle + 0.8) +
-        0.14 * Math.cos(11 * angle - 1.2) + 0.07 * Math.cos(19 * angle);
+      return Math.fround(0.5 * Math.cos(2 * Math.PI * 440 * frame / sampleRate) +
+        0.2 * Math.cos(2 * Math.PI * 713.37 * frame / sampleRate + 0.4));
     }
   };
 }
@@ -708,7 +706,7 @@ function mountWaveCurves(root) {
       return readWav(await file.arrayBuffer());
     }, file.name);
   });
-  listen(query('[data-action="demo"]'), 'click', () => loadDataset(() => makeDemo(), '합성 파동 · 예제', true));
+  listen(query('[data-action="demo"]'), 'click', () => loadDataset(() => makeDemo(), '합성 파동 · 100초 예제', true));
   listen(controls.channel, 'change', async () => {
     const selected = Number(controls.channel.value);
     const sequence = ++loadSequence;
@@ -1005,7 +1003,7 @@ function mountWaveCurves(root) {
   observer.observe(query('.waveform-wrap'));
   fitCanvas(canvas);
   frameId = requestAnimationFrame(render);
-  loadDataset(() => makeDemo(), '합성 파동 · 예제', true);
+  loadDataset(() => makeDemo(), '합성 파동 · 100초 예제', true);
   return {
     destroy() {
       disposed = true;

@@ -92,14 +92,12 @@ export function readWav(buffer) {
 
 export function makeDemo() {
   const sampleRate = 48000;
-  const period = 2048;
   return {
     channels: 1, sampleRate, bits: 32, encoding: 3,
-    frames: sampleRate * 2, duration: 2,
+    frames: sampleRate * 100, duration: 100,
     sample(frame) {
-      const angle = frame * 2 * Math.PI / period;
-      return 0.48 * Math.cos(3 * angle) + 0.24 * Math.cos(7 * angle + 0.8) +
-        0.14 * Math.cos(11 * angle - 1.2) + 0.07 * Math.cos(19 * angle);
+      return Math.fround(0.5 * Math.cos(2 * Math.PI * 440 * frame / sampleRate) +
+        0.2 * Math.cos(2 * Math.PI * 713.37 * frame / sampleRate + 0.4));
     }
   };
 }
