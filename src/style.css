@@ -48,8 +48,9 @@ select, input[type=number] { background: #11171e; border: 1px solid #303b46; col
 .section-heading, .coefficient-heading { display: flex; align-items: center; justify-content: space-between; }
 h2 { font-size: 13px; font-weight: 550; margin: 0; }
 .chip { color: #758998; font-size: 10px; letter-spacing: 1px; }
-.component-summary { display: flex; align-items: baseline; gap: 10px; margin-top: 27px; }
-.component-summary strong { font-size: 42px; letter-spacing: -2px; color: #f2d875; font-weight: 400; font-variant-numeric: tabular-nums; }
+.component-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; margin-top: 27px; }
+.component-summary .component-count { width: 3ch; max-width: 100%; min-width: 0; padding: 0 4px; border: 1px solid transparent; border-bottom-color: #454333; border-radius: 3px; background: transparent; font-size: 42px; letter-spacing: -2px; color: #f2d875; font-weight: 400; font-variant-numeric: tabular-nums; }
+.component-count:hover { border-color: #766b40; }
 .component-summary span { font-size: 11px; color: #9da9b4; }
 .range-label { display: block; margin-top: 12px; }
 .range-caption { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #758391; }

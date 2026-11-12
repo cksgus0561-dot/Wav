@@ -56,8 +56,9 @@ select, input[type=number] { background: #11171e; border: 1px solid #303b46; col
 .section-heading, .coefficient-heading { display: flex; align-items: center; justify-content: space-between; }
 h2 { font-size: 13px; font-weight: 550; margin: 0; }
 .chip { color: #758998; font-size: 10px; letter-spacing: 1px; }
-.component-summary { display: flex; align-items: baseline; gap: 10px; margin-top: 27px; }
-.component-summary strong { font-size: 42px; letter-spacing: -2px; color: #f2d875; font-weight: 400; font-variant-numeric: tabular-nums; }
+.component-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 10px; margin-top: 27px; }
+.component-summary .component-count { width: 3ch; max-width: 100%; min-width: 0; padding: 0 4px; border: 1px solid transparent; border-bottom-color: #454333; border-radius: 3px; background: transparent; font-size: 42px; letter-spacing: -2px; color: #f2d875; font-weight: 400; font-variant-numeric: tabular-nums; }
+.component-count:hover { border-color: #766b40; }
 .component-summary span { font-size: 11px; color: #9da9b4; }
 .range-label { display: block; margin-top: 12px; }
 .range-caption { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #758391; }
@@ -396,7 +397,7 @@ function mountWaveCurves(root) {
         </section>
         <aside class="inspector">
           <div class="section-heading"><h2>푸리에 성분</h2><span class="chip">FFT</span></div>
-          <div class="component-summary"><strong class="component-count">—</strong><span>개의 파동으로 합성</span></div>
+          <div class="component-summary"><input class="component-count" data-control="countNumber" type="number" min="1" max="1025" step="1" value="64" aria-label="합성 성분 수 직접 입력" title="개수를 입력한 뒤 Enter로 적용"><span>개의 파동으로 합성</span></div>
           <label class="range-label"><span class="sr-only">합성 성분 수</span><input data-control="count" type="range" min="1" max="1025" value="64"></label>
           <div class="range-caption"><span>1개</span><button class="text-button" data-action="all">전체 사용</button></div>
           <div class="energy"><span>성분 에너지 유지율</span><strong class="energy-value">—</strong></div>
@@ -544,7 +545,9 @@ function mountWaveCurves(root) {
     radius = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 0.01);
     const totalEnergy = analysis.components.reduce((sum, item) => sum + item.amplitude ** 2, 0);
     const usedEnergy = components.reduce((sum, item) => sum + item.amplitude ** 2, 0);
-    query('.component-count').textContent = number.format(count);
+    controls.countNumber.max = controls.count.max;
+    controls.countNumber.value = String(count);
+    controls.countNumber.style.width = `${Math.max(2, String(count).length) + 1}ch`;
     query('.energy-value').textContent = `${(totalEnergy ? usedEnergy / totalEnergy * 100 : 100).toFixed(2)}%`;
     query('.coefficients').innerHTML = components.slice(0, 6).map(item => `<tr><td>${number.format(item.frequency)}</td><td>${item.amplitude.toFixed(4)}</td><td>${(item.phase * 180 / Math.PI).toFixed(1)}°</td></tr>`).join('');
     if (totalEnergy < 1e-24) query('.load-status').textContent = '선택 구간이 무음입니다. 곡선은 한 점입니다.';
@@ -698,6 +701,25 @@ function mountWaveCurves(root) {
     } else updateSelectionInputs();
   });
   listen(controls.count, 'input', rebuildCurve);
+  function applyCountInput() {
+    const value = controls.countNumber.valueAsNumber;
+    const count = Number.isFinite(value)
+      ? Math.max(1, Math.min(Number(controls.count.max), Math.round(value)))
+      : Number(controls.count.value);
+    controls.countNumber.value = String(count);
+    controls.countNumber.style.width = `${Math.max(2, String(count).length) + 1}ch`;
+    if (count !== Number(controls.count.value)) {
+      controls.count.value = String(count);
+      rebuildCurve();
+    }
+  }
+  listen(controls.countNumber, 'change', applyCountInput);
+  listen(controls.countNumber, 'keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyCountInput();
+    }
+  });
   listen(query('[data-action="all"]'), 'click', () => {
     controls.count.value = controls.count.max;
     rebuildCurve();
