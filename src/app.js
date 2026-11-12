@@ -1,5 +1,6 @@
 import { analyze, makeCurve } from './fourier.js';
 import { readWav, makeDemo } from './wav.js';
+import { createCurveLayer } from './curve-layer.js';
 
 const TAU = Math.PI * 2;
 const number = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 });
@@ -77,7 +78,7 @@ export function mountWaveCurves(root) {
   let analysis;
   let components = [];
   let curve;
-  let outline;
+  let curveLayers;
   let centerX = 0;
   let centerY = 0;
   let radius = 1;
@@ -166,18 +167,15 @@ export function mountWaveCurves(root) {
     let maxX = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
-    outline = new Path2D();
+    curveLayers = null;
     for (let index = 0; index < curve.length; index++) {
       const x = curve.real[index];
       const y = curve.imaginary[index];
-      if (index === 0) outline.moveTo(x, y);
-      else outline.lineTo(x, y);
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
     }
-    outline.closePath();
     centerX = (minX + maxX) / 2;
     centerY = (minY + maxY) / 2;
     radius = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 0.01);
@@ -192,6 +190,7 @@ export function mountWaveCurves(root) {
     else query('.load-status').textContent = '분석 완료';
     sourceTime = 0;
     traceComplete = false;
+    if (curveLayers) curveLayers.trace = null;
     previousTime = performance.now();
     controls.phase.value = '0';
   }
@@ -421,6 +420,7 @@ export function mountWaveCurves(root) {
   listen(query('[data-action="restart"]'), 'click', () => {
     sourceTime = 0;
     traceComplete = false;
+    if (curveLayers) curveLayers.trace = null;
     previousTime = performance.now();
     controls.phase.value = '0';
   });
@@ -428,6 +428,7 @@ export function mountWaveCurves(root) {
     if (!analysis) return;
     sourceTime = Number(controls.phase.value) / 1000 * analysis.length / analysis.sampleRate;
     traceComplete = Number(controls.phase.value) === 1000;
+    if (curveLayers) curveLayers.trace = null;
     previousTime = performance.now();
     playing = false;
     updatePlay();
@@ -484,24 +485,44 @@ export function mountWaveCurves(root) {
       const scale = Math.min(width, height) * 0.34 / radius * zoom;
       const originX = width / 2 + panX - centerX * scale;
       const originY = height / 2 + panY + centerY * scale;
+      const layerKey = [canvas.width, canvas.height, originX, originY, scale].join(',');
+      if (!curveLayers || curveLayers.key !== layerKey) {
+        curveLayers = { key: layerKey, full: null, trace: null };
+      }
+      const newLayer = () => createCurveLayer(curve, canvas.width, canvas.height, { ratio, originX, originY, scale });
+      if (controls.preview.checked || traceComplete) {
+        curveLayers.full ??= newLayer();
+        curveLayers.full.advance(curve.length - 1, true);
+      }
       context.strokeStyle = '#1a232c';
       context.lineWidth = 1;
       context.beginPath();
       context.moveTo(originX, 0); context.lineTo(originX, height);
       context.moveTo(0, originY); context.lineTo(width, originY);
       context.stroke();
+      if (controls.preview.checked && !traceComplete) {
+        context.save();
+        context.globalAlpha = 0.26;
+        context.drawImage(curveLayers.full.canvas, 0, 0, width, height);
+        context.restore();
+      }
       context.save();
       context.translate(originX, originY);
       context.scale(scale, -scale);
-      if (controls.preview.checked) {
-        context.lineWidth = 1 / scale;
-        context.strokeStyle = '#bcae5942';
-        context.stroke(outline);
-      }
       let x = 0;
       let y = 0;
-      const chain = new Path2D();
+      let chain = new Path2D();
       chain.moveTo(0, 0);
+      let chainX = 0;
+      let chainY = 0;
+      let chainSegments = 0;
+      const strokeChain = () => {
+        context.save();
+        context.lineWidth = 1 / scale;
+        context.strokeStyle = '#c7d6dc9c';
+        context.stroke(chain);
+        context.restore();
+      };
       for (let index = 0; index < components.length; index++) {
         const component = components[index];
         if (controls.circles.checked && index < 64 && component.bin !== 0 && component.amplitude * scale > 0.6) {
@@ -514,25 +535,44 @@ export function mountWaveCurves(root) {
         const angle = TAU * component.frequency * sourceTime + component.phase;
         x += component.amplitude * Math.cos(angle);
         y += component.amplitude * Math.sin(angle);
-        chain.lineTo(x, y);
+        // All components are summed. Only visually subpixel chain segments
+        // are coalesced; this does not change the endpoint or the curve.
+        if (controls.vectors.checked && Math.hypot(x - chainX, y - chainY) * scale >= 0.25) {
+          chain.lineTo(x, y);
+          chainX = x;
+          chainY = y;
+          if (++chainSegments === 4096) {
+            strokeChain();
+            chain = new Path2D();
+            chain.moveTo(x, y);
+            chainSegments = 0;
+          }
+        }
       }
       if (controls.vectors.checked) {
-        context.lineWidth = 1 / scale;
-        context.strokeStyle = '#c7d6dc9c';
-        context.stroke(chain);
+        chain.lineTo(x, y);
+        strokeChain();
       }
-      context.strokeStyle = '#f2d875';
-      context.lineWidth = 1.6 / scale;
+      context.restore();
       if (traceComplete) {
-        context.stroke(outline);
+        context.drawImage(curveLayers.full.canvas, 0, 0, width, height);
       } else {
-        const end = Math.floor(phase * curve.length);
-        context.beginPath();
-        context.moveTo(curve.real[0], curve.imaginary[0]);
-        for (let index = 1; index <= end; index++) context.lineTo(curve.real[index], curve.imaginary[index]);
-        context.lineTo(x, y);
-        context.stroke();
+        const end = Math.min(curve.length - 1, Math.floor(phase * curve.length));
+        curveLayers.trace ??= newLayer();
+        const caughtUp = curveLayers.trace.advance(end);
+        context.drawImage(curveLayers.trace.canvas, 0, 0, width, height);
+        if (caughtUp) {
+          context.beginPath();
+          context.moveTo(originX + curve.real[end] * scale, originY - curve.imaginary[end] * scale);
+          context.lineTo(originX + x * scale, originY - y * scale);
+          context.strokeStyle = '#f2d875';
+          context.lineWidth = 1.6;
+          context.stroke();
+        }
       }
+      context.save();
+      context.translate(originX, originY);
+      context.scale(scale, -scale);
       context.fillStyle = '#fff4bc';
       context.beginPath();
       context.arc(x, y, 3.2 / scale, 0, TAU);
