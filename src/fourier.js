@@ -90,21 +90,25 @@ function radix2(real, imaginary, inverse = false) {
   }
 }
 
-// Keep every FFT coefficient, with the same 1/N normalization for every bin.
-// Magnitude is metadata for sorting and display; synthesis uses re/im directly.
+// Represent each real sinusoid by one complex rotation: cos(wt) -> exp(iwt).
+// Its conjugate FFT pair gives the cosine and sine coefficients together:
+// (X[k] + conjugate(X[N-k])) / N. For real input this equals 2*X[k]/N.
+// DC and even-N Nyquist have no distinct partner and are counted once.
+// This is a real-tone-to-rotation mapping, not the full inverse DFT.
 export function analyze(samples, sampleRate) {
   const real = Float64Array.from(samples);
   const imaginary = new Float64Array(samples.length);
   fft(real, imaginary);
   const components = [];
-  for (let bin = 0; bin < samples.length; bin++) {
-    const harmonic = bin < Math.ceil(samples.length / 2) ? bin : bin - samples.length;
-    const re = real[bin] / samples.length;
-    const im = imaginary[bin] / samples.length;
+  for (let bin = 0; bin <= Math.floor(samples.length / 2); bin++) {
+    const partner = bin === 0 ? 0 : samples.length - bin;
+    const paired = partner !== bin;
+    const re = (real[bin] + (paired ? real[partner] : 0)) / samples.length;
+    const im = (imaginary[bin] - (paired ? imaginary[partner] : 0)) / samples.length;
     components.push({
-      bin, harmonic, re, im,
+      bin, harmonic: bin, re, im,
       amplitude: Math.hypot(re, im),
-      frequency: harmonic * sampleRate / samples.length
+      frequency: bin * sampleRate / samples.length
     });
   }
   components.sort((a, b) => b.amplitude - a.amplitude || a.bin - b.bin);

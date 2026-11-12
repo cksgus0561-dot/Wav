@@ -51,7 +51,7 @@ try {
   assert.equal(snapshot.time, 50);
   assert.ok(snapshot.yellow > 200, 'long trace must be visible after seeking');
   await page.locator('[data-action="all"]').click();
-  assert.equal(await control('countNumber').inputValue(), '4800000');
+  assert.equal(await control('countNumber').inputValue(), '2400001');
   assert.equal(await page.locator('.energy-value').textContent(), '100.00%');
   await control('speed').fill('1');
   await control('speed').press('Enter');
@@ -60,7 +60,8 @@ try {
   assert.equal(snapshot.time, 1);
   assert.ok(snapshot.yellow > 200, 'all-component playback must draw the curve');
   assert.ok(Math.abs(snapshot.endpoint.x - Math.fround(value(48000))) < 1e-6, 'all components must reconstruct the input sample');
-  assert.ok(Math.abs(snapshot.endpoint.y) < 1e-6, 'all coefficients must cancel the imaginary part at the source sample');
+  const expectedY = 0.5 * Math.sin(2 * Math.PI * 440) + 0.2 * Math.sin(2 * Math.PI * 713.37 + 0.4);
+  assert.ok(Math.abs(snapshot.endpoint.y - expectedY) < 1e-6, 'all rotations must preserve the sine coordinate');
   await page.getByRole('button', { name: '애니메이션 일시정지', exact: true }).click();
   await page.locator('[data-action="fit"]').click();
   await page.setViewportSize({ width: 1000, height: 750 });
@@ -71,7 +72,7 @@ try {
   await control('vectors').uncheck();
   assert.ok((await tick(0)).yellow < 100, 'seeking back must clear the previous trace');
   assert.deepEqual(errors, []);
-  console.log('PASS: 100 seconds at 48 kHz, all 4,800,000 coefficients, visible preview/trace, real sample reconstruction and zero imaginary part at 1x, seeking, resize, and no page errors.');
+  console.log('PASS: 100 seconds at 48 kHz, all 2,400,001 sinusoid rotations, visible preview/trace, original x and sine y at 1x, seeking, resize, and no page errors.');
 } finally {
   await browser.close();
 }

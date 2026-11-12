@@ -242,21 +242,25 @@ function radix2(real, imaginary, inverse = false) {
   }
 }
 
-// Keep every FFT coefficient, with the same 1/N normalization for every bin.
-// Magnitude is metadata for sorting and display; synthesis uses re/im directly.
+// Represent each real sinusoid by one complex rotation: cos(wt) -> exp(iwt).
+// Its conjugate FFT pair gives the cosine and sine coefficients together:
+// (X[k] + conjugate(X[N-k])) / N. For real input this equals 2*X[k]/N.
+// DC and even-N Nyquist have no distinct partner and are counted once.
+// This is a real-tone-to-rotation mapping, not the full inverse DFT.
 function analyze(samples, sampleRate) {
   const real = Float64Array.from(samples);
   const imaginary = new Float64Array(samples.length);
   fft(real, imaginary);
   const components = [];
-  for (let bin = 0; bin < samples.length; bin++) {
-    const harmonic = bin < Math.ceil(samples.length / 2) ? bin : bin - samples.length;
-    const re = real[bin] / samples.length;
-    const im = imaginary[bin] / samples.length;
+  for (let bin = 0; bin <= Math.floor(samples.length / 2); bin++) {
+    const partner = bin === 0 ? 0 : samples.length - bin;
+    const paired = partner !== bin;
+    const re = (real[bin] + (paired ? real[partner] : 0)) / samples.length;
+    const im = (imaginary[bin] - (paired ? imaginary[partner] : 0)) / samples.length;
     components.push({
-      bin, harmonic, re, im,
+      bin, harmonic: bin, re, im,
       amplitude: Math.hypot(re, im),
-      frequency: harmonic * sampleRate / samples.length
+      frequency: bin * sampleRate / samples.length
     });
   }
   components.sort((a, b) => b.amplitude - a.amplitude || a.bin - b.bin);
@@ -487,7 +491,7 @@ function mountWaveCurves(root) {
           <p class="inspector-note">진폭이 큰 성분부터 더합니다. 성분 수를 바꾸며 곡선의 변화를 살펴보세요.</p>
           <div class="coefficient-heading"><h3>주요 성분</h3><span>FFT 주파수</span></div>
           <table><thead><tr><th>Hz</th><th>진폭</th><th>위상</th></tr></thead><tbody class="coefficients"></tbody></table>
-          <details><summary>곡선은 어떻게 만들어지나요?</summary><p>WAV의 FFT 출력 Xₖ를 샘플 수 N으로 나눈 복소 계수 Cₖ를 사용합니다. 양·음 주파수를 모두 유지하고, |Cₖ|가 큰 순서로 선택한 성분의 Cₖ·e^(i2πfₖt)를 더합니다. 합의 실수부가 x, 허수부가 y입니다. 전체 사용은 N개 계수를 모두 포함합니다.</p><p>t는 구간 내 원본 시간(초), fₖ는 부호를 포함한 주파수(Hz)입니다. 1×에서는 화면 1초 동안 원본 시간도 1초 진행합니다. 선택 구간의 끝에 도달하면 처음부터 반복합니다. 실수 WAV의 전체 계수를 합하면 원래 샘플 시점에서 허수부는 수치 오차를 제외하고 0이 됩니다.</p><p>빠른 회전을 살펴보려면 재생 배율을 낮추세요. 원 가이드는 진폭이 큰 64개까지 표시합니다. 연결선과 곡선에는 선택한 모든 성분을 반영합니다.</p></details>
+          <details><summary>곡선은 어떻게 만들어지나요?</summary><p>WAV의 사인파 하나를 복소 회전 하나로 표현합니다. 진폭 1·초기 위상 0인 1Hz 성분은 (cos(2πt), sin(2πt))로, 반시계 방향으로 1초에 한 바퀴 돕니다. FFT에서 같은 실수 사인파에 해당하는 계수 쌍을 묶어 회전 계수를 구하고, 그 크기순으로 선택한 회전들을 더합니다. 합의 실수부가 x, 허수부가 y입니다.</p><p>t는 구간 내 원본 시간(초)입니다. 1×에서는 화면 1초 동안 원본 시간도 1초 진행합니다. 선택 구간의 끝에 도달하면 처음부터 반복합니다. 전체 사용은 분석한 모든 사인파의 회전을 포함합니다.</p><p>빠른 회전을 살펴보려면 재생 배율을 낮추세요. 원 가이드는 진폭이 큰 64개까지 표시합니다. 연결선과 곡선에는 선택한 모든 성분을 반영합니다.</p></details>
         </aside>
         <section class="source-panel" aria-label="WAV 파형 및 분석 구간">
           <div class="source-heading"><div class="file-description"><span class="file-tag">WAV</span><div><h2 class="file-name">불러오는 중</h2><p class="file-meta">원본 샘플레이트 유지</p></div></div><span class="load-status" role="status" aria-live="polite"></span></div>
