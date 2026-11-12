@@ -388,7 +388,7 @@ function mountWaveCurves(root) {
             <button class="quiet" data-action="fit">화면 맞춤</button>
           </div>
           <div class="transport">
-            <button class="play-button" data-action="play" aria-label="애니메이션 일시정지">Ⅱ</button>
+            <button class="play-button" data-action="play" aria-label="애니메이션 일시정지" aria-keyshortcuts="Space" title="재생 / 일시정지 (Space)">Ⅱ</button>
             <button class="restart" data-action="restart" aria-label="처음부터 그리기">↺</button>
             <label class="scrubber-label"><span class="sr-only">애니메이션 위치</span><input data-control="phase" type="range" min="0" max="1000" value="0"></label>
             <label class="speed-label">재생 배율<select data-control="speed"><option value="1" selected>1×</option><option value="0.5">0.5×</option><option value="0.1">0.1×</option><option value="0.01">0.01×</option><option value="0.001">0.001×</option></select></label>
@@ -716,10 +716,24 @@ function mountWaveCurves(root) {
       sourceTime = (sourceTime + elapsedSeconds * playbackRate) % duration;
     }
   }
-  listen(query('[data-action="play"]'), 'click', () => {
+  function togglePlay() {
     advanceClock();
     playing = !playing;
     updatePlay();
+  }
+  listen(query('[data-action="play"]'), 'click', togglePlay);
+  listen(document, 'keydown', event => {
+    if (event.code !== 'Space' || event.defaultPrevented || event.isComposing ||
+        event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+    if (!analysis || !root.isConnected || !root.getClientRects().length) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!root.contains(target) && target !== document.body && target !== document.documentElement) return;
+    if (target.isContentEditable) return;
+    const nativeControl = target.closest('input:not([type="range"]), textarea, select, button, a[href], summary, [role="button"], [role="textbox"]');
+    if (nativeControl && nativeControl !== query('[data-action="play"]')) return;
+    event.preventDefault();
+    if (!event.repeat) togglePlay();
   });
   listen(controls.speed, 'change', () => {
     advanceClock();
