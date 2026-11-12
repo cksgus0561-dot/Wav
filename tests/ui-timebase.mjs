@@ -30,6 +30,11 @@ try {
   await page.waitForSelector('#app[data-ready="true"]');
   await page.getByRole('button', { name: '애니메이션 일시정지', exact: true }).click();
   const control = name => page.locator(`[data-control="${name}"]`);
+  assert.equal(await control('speed').inputValue(), '0.001');
+  const setSpeed = async (value, key = 'Enter') => {
+    await control('speed').fill(value);
+    await control('speed').press(key);
+  };
   const tick = async milliseconds => page.evaluate(async delta => {
     window.testMilliseconds += delta;
     await new Promise(requestAnimationFrame);
@@ -61,7 +66,7 @@ try {
       assert.match(await page.locator('.coefficients tr').first().textContent(), /^8/);
       const coefficients = await page.locator('.coefficients').innerHTML();
       const selection = await control('start').inputValue();
-      await control('speed').selectOption('1');
+      await setSpeed('1');
       await play();
       const snapshot = await tick(137);
       checkPoint(snapshot, 0.137);
@@ -78,15 +83,15 @@ try {
   await page.locator('[data-action="restart"]').click();
   await play();
   checkPoint(await tick(1200), 1.2);
-  await control('speed').selectOption('0.1');
+  await setSpeed('0.1');
   checkPoint(await tick(0), 1.2);
   checkPoint(await tick(1000), 1.3);
-  await control('speed').selectOption('1');
+  await setSpeed('1');
   checkPoint(await tick(900), 0.2);
   await pause();
   await control('phase').fill('750');
   checkPoint(await tick(0), 1.5);
-  await control('speed').selectOption('0.001');
+  await setSpeed('0.001');
   await play();
   checkPoint(await tick(1000), 1.501);
 
@@ -100,6 +105,18 @@ try {
     document.dispatchEvent(new Event('visibilitychange'));
   });
   checkPoint(await tick(1000), 1.502);
+  await setSpeed('0.0037');
+  checkPoint(await tick(0), 1.502);
+  checkPoint(await tick(1000), 1.5057);
+  await setSpeed('2.5', 'Tab');
+  checkPoint(await tick(100), 1.7557);
+  for (const invalid of ['', '0', '-1']) {
+    await setSpeed(invalid);
+    assert.equal(await control('speed').inputValue(), '2.5');
+    checkPoint(await tick(0), 1.7557);
+  }
+  await setSpeed('0.000001');
+  checkPoint(await tick(1000), 1.755701);
   await pause();
 
   // Select a non-power-of-two, odd interval using seconds. The source tone
@@ -128,7 +145,7 @@ try {
   await setNumber('duration', 0.10002);
   await checkSelection(0, 4801);
   await control('count').fill('1');
-  await control('speed').selectOption('1');
+  await setSpeed('1');
   await play();
   checkPoint(await tick(10.001), 0.010001, frequency);
   await checkSelection(0, 4801);

@@ -43,7 +43,7 @@ input[type=checkbox] { accent-color: #e9cf6b; width: 12px; height: 12px; margin:
 input[type=range] { width: 100%; accent-color: #e9cf6b; height: 4px; margin: 12px 0; }
 .speed-label { display: flex; align-items: center; gap: 10px; color: #8e9aa6; font-size: 11px; white-space: nowrap; }
 select, input[type=number] { background: #11171e; border: 1px solid #303b46; color: #d1dae2; border-radius: 5px; padding: 7px 10px; font-size: 12px; }
-.speed-label select { padding: 6px; }
+.speed-label input { width: 82px; min-width: 0; padding: 6px; }
 .inspector { background: #11161c; border: 1px solid #252d36; border-left: 0; border-radius: 0 10px 10px 0; padding: 25px 24px; }
 .section-heading, .coefficient-heading { display: flex; align-items: center; justify-content: space-between; }
 h2 { font-size: 13px; font-weight: 550; margin: 0; }

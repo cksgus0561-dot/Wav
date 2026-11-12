@@ -29,7 +29,7 @@ export function mountWaveCurves(root) {
             <button class="play-button" data-action="play" aria-label="애니메이션 일시정지" aria-keyshortcuts="Space" title="재생 / 일시정지 (Space)">Ⅱ</button>
             <button class="restart" data-action="restart" aria-label="처음부터 그리기">↺</button>
             <label class="scrubber-label"><span class="sr-only">애니메이션 위치</span><input data-control="phase" type="range" min="0" max="1000" value="0"></label>
-            <label class="speed-label">재생 배율<select data-control="speed"><option value="1" selected>1×</option><option value="0.5">0.5×</option><option value="0.1">0.1×</option><option value="0.01">0.01×</option><option value="0.001">0.001×</option></select></label>
+            <label class="speed-label">재생 배율<input data-control="speed" type="number" min="0" step="any" value="0.001" title="0보다 큰 배율을 입력한 뒤 Enter로 적용"><span>×</span></label>
           </div>
         </section>
         <aside class="inspector">
@@ -394,9 +394,22 @@ export function mountWaveCurves(root) {
     event.preventDefault();
     if (!event.repeat) togglePlay();
   });
-  listen(controls.speed, 'change', () => {
+  function applyPlaybackRate() {
+    const rate = controls.speed.valueAsNumber;
+    if (!Number.isFinite(rate) || rate <= 0) {
+      controls.speed.value = String(playbackRate);
+      return;
+    }
     advanceClock();
-    playbackRate = Number(controls.speed.value);
+    playbackRate = rate;
+    controls.speed.value = String(playbackRate);
+  }
+  listen(controls.speed, 'change', applyPlaybackRate);
+  listen(controls.speed, 'keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyPlaybackRate();
+    }
   });
   listen(document, 'visibilitychange', () => { previousTime = performance.now(); });
   listen(query('[data-action="restart"]'), 'click', () => {
