@@ -64,7 +64,10 @@ export function mountWaveCurves(root) {
             <output class="wave-view-info"></output>
           </div>
           <div class="waveform-wrap"><canvas class="waveform" tabindex="0" role="slider" aria-label="분석 구간 위치. 좌우 화살표로 이동" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></canvas></div>
-          <div class="waveform-caption"><span class="wave-view-start">0 s</span><span class="wave-view-end">0 s</span></div>
+          <div class="waveform-caption">
+            <label class="wave-view-start"><input data-control="waveStartTime" type="number" value="0" min="0" step="any" aria-label="파형 보기 시작 시간" title="보이는 구간의 시작 시간 · Enter로 적용"><span>s</span></label>
+            <label class="wave-view-end"><input data-control="waveEndTime" type="number" value="0" min="0" step="any" aria-label="파형 보기 끝 시간" title="보이는 구간의 끝 시간 · Enter로 적용"><span>s</span></label>
+          </div>
           <label class="wave-scroll"><span>보기 위치</span><input data-control="wavePosition" type="range" min="0" max="0" value="0" step="1" aria-label="파형 보기 위치"></label>
           <p class="waveform-help">휠: 확대·축소 · Shift+드래그 또는 이동 모드: 좌우 이동 · 클릭·드래그: 분석 구간 이동</p>
         </section>
@@ -245,8 +248,12 @@ export function mountWaveCurves(root) {
       waveContext.stroke();
     }
     const seconds = waveLength / source.sampleRate;
-    query('.wave-view-start').textContent = `${(waveStart / source.sampleRate).toFixed(6)} s`;
-    query('.wave-view-end').textContent = `${((waveStart + waveLength) / source.sampleRate).toFixed(6)} s`;
+    controls.waveStartTime.value = (waveStart / source.sampleRate).toFixed(6);
+    controls.waveEndTime.value = ((waveStart + waveLength) / source.sampleRate).toFixed(6);
+    const minimumView = Math.min(8, source.frames);
+    controls.waveStartTime.max = String((waveStart + waveLength - minimumView) / source.sampleRate);
+    controls.waveEndTime.min = String((waveStart + minimumView) / source.sampleRate);
+    controls.waveEndTime.max = String(source.duration);
     query('.wave-view-info').textContent = `${number.format(source.frames / waveLength)}× · ${seconds < 1 ? `${number.format(seconds * 1000)} ms` : `${number.format(seconds)} s`} 표시`;
     controls.wavePosition.max = String(Math.ceil(source.frames - waveLength));
     controls.wavePosition.value = String(Math.round(waveStart));
@@ -565,6 +572,31 @@ export function mountWaveCurves(root) {
     waveform.classList.toggle('pan-mode', wavePanMode);
   });
   listen(controls.wavePosition, 'input', () => setWaveView(Number(controls.wavePosition.value), waveLength));
+  function applyWaveBoundary(input, isStart) {
+    if (!source) return;
+    const seconds = input.valueAsNumber;
+    if (!Number.isFinite(seconds)) { drawWaveform(); return; }
+    const current = isStart ? waveStart : waveStart + waveLength;
+    if (input.value === (current / source.sampleRate).toFixed(6)) return;
+    const minimum = Math.min(8, source.frames);
+    if (isStart) {
+      const end = waveStart + waveLength;
+      const start = Math.max(0, Math.min(end - minimum, seconds * source.sampleRate));
+      setWaveView(start, end - start);
+    } else {
+      const end = Math.max(waveStart + minimum, Math.min(source.frames, seconds * source.sampleRate));
+      setWaveView(waveStart, end - waveStart);
+    }
+  }
+  for (const [input, isStart] of [[controls.waveStartTime, true], [controls.waveEndTime, false]]) {
+    listen(input, 'change', () => applyWaveBoundary(input, isStart));
+    listen(input, 'keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyWaveBoundary(input, isStart);
+      }
+    });
+  }
   listen(waveform, 'wheel', event => {
     if (!source || query('.source-controls').disabled) return;
     event.preventDefault();

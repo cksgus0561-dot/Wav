@@ -29,6 +29,29 @@ try {
   const selection = async () => Promise.all(['start','duration','countNumber'].map(name => control(name).inputValue()));
   const original = await selection();
   assert.equal((await view()).length, 4800000);
+  const enterBoundary = async (name, value, key = 'Enter') => {
+    await control(name).fill(value);
+    await control(name).press(key);
+  };
+  await enterBoundary('waveStartTime', '11.826651');
+  assert.ok(Math.abs((await view()).start / 48000 - 11.826651) < 1e-9);
+  assert.equal(await control('waveEndTime').inputValue(), '100.000000');
+  await enterBoundary('waveEndTime', '11.901309', 'Tab');
+  assert.equal(await control('waveStartTime').inputValue(), '11.826651');
+  assert.ok(Math.abs((await view()).length / 48000 - (11.901309 - 11.826651)) < 1e-9);
+  const numericView = await view();
+  await enterBoundary('waveStartTime', '');
+  assert.deepEqual(await view(), numericView);
+  await enterBoundary('waveEndTime', '1000');
+  assert.equal(await control('waveEndTime').inputValue(), '100.000000');
+  await enterBoundary('waveStartTime', '-1');
+  assert.equal((await view()).start, 0);
+  await enterBoundary('waveEndTime', '0');
+  assert.equal((await view()).length, 8);
+  await enterBoundary('waveStartTime', '100');
+  assert.equal((await view()).start, 0);
+  assert.deepEqual(await selection(), original, 'numeric viewing bounds must not change the analysis');
+  await action('wave-fit').click();
   await action('wave-selection').click();
   assert.ok((await view()).length < 2500);
   await action('wave-in').click();
@@ -42,6 +65,8 @@ try {
   await page.mouse.wheel(0, -300);
   await page.waitForFunction(length => Number(document.querySelector('.waveform').dataset.viewLength) < length, before.length);
   const after = await view();
+  assert.equal(await control('waveStartTime').inputValue(), (after.start / 48000).toFixed(6));
+  assert.equal(await control('waveEndTime').inputValue(), ((after.start + after.length) / 48000).toFixed(6));
   assert.ok(Math.abs(after.start + after.length * 0.3 - (before.start + before.length * 0.3)) < 1, 'zoom anchor stays within one sample after pointer pixel rounding');
   assert.equal(await page.evaluate(() => scrollY), scrollBefore);
   await control('wavePosition').fill('1000000');
