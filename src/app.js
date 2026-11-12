@@ -53,8 +53,20 @@ export function mountWaveCurves(root) {
             <label>구간 길이<input data-control="duration" type="number" min="0" step="any"><span>초</span></label>
             <output class="window-info"></output>
           </fieldset>
+          <div class="waveform-toolbar" aria-label="파형 보기 조절">
+            <div class="waveform-buttons">
+              <button data-action="wave-out" aria-label="파형 축소" title="파형 축소">−</button>
+              <button data-action="wave-in" aria-label="파형 확대" title="파형 확대">+</button>
+              <button data-action="wave-fit">전체 보기</button>
+              <button data-action="wave-selection">선택 구간 보기</button>
+              <button data-action="wave-pan" aria-pressed="false" title="켜면 드래그로 파형 화면을 좌우 이동합니다">이동 모드</button>
+            </div>
+            <output class="wave-view-info"></output>
+          </div>
           <div class="waveform-wrap"><canvas class="waveform" tabindex="0" role="slider" aria-label="분석 구간 위치. 좌우 화살표로 이동" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></canvas></div>
-          <div class="waveform-caption"><span>0:00</span><span>파형을 클릭하거나 드래그해 분석 구간 이동</span><span class="duration">0:00</span></div>
+          <div class="waveform-caption"><span class="wave-view-start">0 s</span><span class="wave-view-end">0 s</span></div>
+          <label class="wave-scroll"><span>보기 위치</span><input data-control="wavePosition" type="range" min="0" max="0" value="0" step="1" aria-label="파형 보기 위치"></label>
+          <p class="waveform-help">휠: 확대·축소 · Shift+드래그 또는 이동 모드: 좌우 이동 · 클릭·드래그: 분석 구간 이동</p>
         </section>
       </main>
       <footer><span>선택 구간을 한 주기로 합성</span><span>마우스 드래그 · 시점 이동 &nbsp; 휠 · 확대</span></footer>
@@ -92,7 +104,10 @@ export function mountWaveCurves(root) {
   let panX = 0;
   let panY = 0;
   let plotDrag;
-  let waveformDrag = false;
+  let waveformDrag = null;
+  let waveStart = 0;
+  let waveLength = 1;
+  let wavePanMode = false;
 
   function showError(error) {
     query('.error').textContent = error.message;
@@ -108,27 +123,59 @@ export function mountWaveCurves(root) {
   }
 
   async function buildEnvelope(dataset, selectedChannel, sequence) {
-    const bins = Math.min(1600, dataset.frames);
-    const values = [];
+    // Keep a pyramid of min/max buckets, so zooming reveals source samples
+    // rather than stretching the thumbnail of the whole file.
+    const bucketSize = 64;
+    const bins = Math.ceil(dataset.frames / bucketSize);
+    const low = new Float64Array(bins);
+    const high = new Float64Array(bins);
     let peak = 0;
     for (let bin = 0; bin < bins; bin++) {
-      let low = Infinity;
-      let high = -Infinity;
-      const first = Math.floor(bin * dataset.frames / bins);
-      const last = Math.floor((bin + 1) * dataset.frames / bins);
+      let minimum = Infinity;
+      let maximum = -Infinity;
+      const first = bin * bucketSize;
+      const last = Math.min(dataset.frames, first + bucketSize);
       for (let frame = first; frame < last; frame++) {
         const value = dataset.sample(frame, selectedChannel);
-        low = Math.min(low, value);
-        high = Math.max(high, value);
+        minimum = Math.min(minimum, value);
+        maximum = Math.max(maximum, value);
       }
-      peak = Math.max(peak, Math.abs(low), Math.abs(high));
-      values.push({ low, high });
-      if (bin % 64 === 0) {
+      peak = Math.max(peak, Math.abs(minimum), Math.abs(maximum));
+      low[bin] = minimum;
+      high[bin] = maximum;
+      if (bin % 4096 === 0) {
         await nextFrame();
         if (disposed || sequence !== loadSequence) return null;
       }
     }
-    return { values, peak: peak || 1 };
+    const levels = [{ low, high, bucketSize }];
+    while (levels.at(-1).low.length > 1) {
+      const previous = levels.at(-1);
+      const count = Math.ceil(previous.low.length / 2);
+      const next = { low: new Float64Array(count), high: new Float64Array(count), bucketSize: previous.bucketSize * 2 };
+      for (let index = 0; index < count; index++) {
+        const a = index * 2;
+        const b = Math.min(a + 1, previous.low.length - 1);
+        next.low[index] = Math.min(previous.low[a], previous.low[b]);
+        next.high[index] = Math.max(previous.high[a], previous.high[b]);
+      }
+      levels.push(next);
+    }
+    return { levels, peak: peak || 1 };
+  }
+
+  function setWaveView(start, length) {
+    if (!source) return;
+    waveLength = Math.max(Math.min(8, source.frames), Math.min(source.frames, length));
+    waveStart = Math.max(0, Math.min(source.frames - waveLength, start));
+    drawWaveform();
+  }
+
+  function zoomWave(factor, fraction = 0.5) {
+    if (!source) return;
+    const anchor = waveStart + fraction * waveLength;
+    const length = Math.max(Math.min(8, source.frames), Math.min(source.frames, waveLength * factor));
+    setWaveView(anchor - fraction * length, length);
   }
 
   function drawWaveform() {
@@ -137,22 +184,77 @@ export function mountWaveCurves(root) {
     waveContext.setTransform(scale, 0, 0, scale, 0, 0);
     waveContext.clearRect(0, 0, width, height);
     if (!source || !envelope) return;
-    waveContext.strokeStyle = '#607981';
+    waveContext.strokeStyle = '#8eb5c0';
     waveContext.lineWidth = 1;
     waveContext.beginPath();
-    for (let index = 0; index < envelope.values.length; index++) {
-      const x = index / envelope.values.length * width;
-      const { low, high } = envelope.values[index];
-      waveContext.moveTo(x, height / 2 - high / envelope.peak * height * 0.42);
-      waveContext.lineTo(x, height / 2 - low / envelope.peak * height * 0.42 + 0.5);
+    const samplesPerPixel = waveLength / Math.max(width, 1);
+    const y = value => height / 2 - value / envelope.peak * height * 0.42;
+    const x = frame => (frame - waveStart) / waveLength * width;
+    if (samplesPerPixel <= 2) {
+      const first = Math.max(0, Math.floor(waveStart));
+      const last = Math.min(source.frames - 1, Math.ceil(waveStart + waveLength));
+      for (let frame = first; frame <= last; frame++) {
+        const px = x(frame);
+        const py = y(source.sample(frame, channel));
+        if (frame === first) waveContext.moveTo(px, py);
+        else waveContext.lineTo(px, py);
+      }
+      waveform.dataset.detail = 'samples';
+    } else if (samplesPerPixel < 64) {
+      for (let pixel = 0; pixel < Math.ceil(width); pixel++) {
+        const first = Math.floor(waveStart + pixel * samplesPerPixel);
+        const last = Math.min(source.frames, Math.ceil(waveStart + (pixel + 1) * samplesPerPixel));
+        let low = Infinity;
+        let high = -Infinity;
+        for (let frame = first; frame < last; frame++) {
+          const value = source.sample(frame, channel);
+          low = Math.min(low, value);
+          high = Math.max(high, value);
+        }
+        if (first < last) {
+          waveContext.moveTo(pixel, y(high));
+          waveContext.lineTo(pixel, y(low) + 0.5);
+        }
+      }
+      waveform.dataset.detail = 'envelope';
+    } else {
+      const level = envelope.levels[Math.min(envelope.levels.length - 1, Math.floor(Math.log2(samplesPerPixel / 64)))];
+      const first = Math.floor(waveStart / level.bucketSize);
+      const last = Math.min(level.low.length, Math.ceil((waveStart + waveLength) / level.bucketSize));
+      for (let index = first; index < last; index++) {
+        const px = Math.max(0, x(index * level.bucketSize));
+        waveContext.moveTo(px, y(level.high[index]));
+        waveContext.lineTo(px, y(level.low[index]) + 0.5);
+      }
+      waveform.dataset.detail = 'envelope';
     }
     waveContext.stroke();
-    const left = startFrame / source.frames * width;
-    const selectionWidth = Math.max(2, selectionLength / source.frames * width);
-    waveContext.fillStyle = '#e9cf6b26';
-    waveContext.fillRect(left, 0, selectionWidth, height);
-    waveContext.strokeStyle = '#e9cf6b';
-    waveContext.strokeRect(left + 0.5, 0.5, selectionWidth, height - 1);
+    const left = x(startFrame);
+    const right = x(startFrame + selectionLength);
+    if (right >= 0 && left <= width) {
+      const visibleLeft = Math.max(0, left);
+      const visibleRight = Math.min(width, Math.max(right, left + 2));
+      waveContext.fillStyle = '#e9cf6b26';
+      waveContext.fillRect(visibleLeft, 0, visibleRight - visibleLeft, height);
+      waveContext.strokeStyle = '#e9cf6b';
+      waveContext.beginPath();
+      waveContext.moveTo(visibleLeft, 0.5); waveContext.lineTo(visibleRight, 0.5);
+      waveContext.moveTo(visibleLeft, height - 0.5); waveContext.lineTo(visibleRight, height - 0.5);
+      if (left >= 0) { waveContext.moveTo(left + 0.5, 0); waveContext.lineTo(left + 0.5, height); }
+      if (right <= width) { waveContext.moveTo(visibleRight - 0.5, 0); waveContext.lineTo(visibleRight - 0.5, height); }
+      waveContext.stroke();
+    }
+    const seconds = waveLength / source.sampleRate;
+    query('.wave-view-start').textContent = `${(waveStart / source.sampleRate).toFixed(6)} s`;
+    query('.wave-view-end').textContent = `${((waveStart + waveLength) / source.sampleRate).toFixed(6)} s`;
+    query('.wave-view-info').textContent = `${number.format(source.frames / waveLength)}× · ${seconds < 1 ? `${number.format(seconds * 1000)} ms` : `${number.format(seconds)} s`} 표시`;
+    controls.wavePosition.max = String(Math.ceil(source.frames - waveLength));
+    controls.wavePosition.value = String(Math.round(waveStart));
+    controls.wavePosition.disabled = waveLength >= source.frames;
+    query('[data-action="wave-in"]').disabled = waveLength <= Math.min(8, source.frames);
+    query('[data-action="wave-out"]').disabled = waveLength >= source.frames;
+    waveform.dataset.viewStart = String(waveStart);
+    waveform.dataset.viewLength = String(waveLength);
     waveform.setAttribute('aria-valuemax', String(source.duration));
     waveform.setAttribute('aria-valuenow', String(startFrame / source.sampleRate));
     waveform.setAttribute('aria-valuetext', `${(startFrame / source.sampleRate).toFixed(6)}초부터 ${selectionLength}개 샘플`);
@@ -259,6 +361,8 @@ export function mountWaveCurves(root) {
       const nextEnvelope = await buildEnvelope(dataset, 0, sequence);
       if (!nextEnvelope || disposed || sequence !== loadSequence) return;
       source = dataset;
+      waveStart = 0;
+      waveLength = source.frames;
       envelope = nextEnvelope;
       channel = 0;
       startFrame = 0;
@@ -267,7 +371,6 @@ export function mountWaveCurves(root) {
       query('.file-name').textContent = name;
       query('.file-tag').textContent = isDemo ? '예제' : 'WAV';
       query('.file-meta').textContent = `${number.format(source.sampleRate)} Hz · ${source.bits}-bit ${source.encoding === 3 ? 'float' : 'PCM'} · ${source.channels}채널 · ${number.format(source.duration)}초`;
-      query('.duration').textContent = `${Math.floor(source.duration / 60)}:${String(Math.floor(source.duration % 60)).padStart(2, '0')}`;
       zoom = 1;
       panX = panY = 0;
       analyzeSelection();
@@ -450,19 +553,50 @@ export function mountWaveCurves(root) {
     plotDrag = { x: event.clientX, y: event.clientY };
   });
   listen(canvas, 'lostpointercapture', () => { plotDrag = null; });
+  listen(query('[data-action="wave-in"]'), 'click', () => zoomWave(0.5));
+  listen(query('[data-action="wave-out"]'), 'click', () => zoomWave(2));
+  listen(query('[data-action="wave-fit"]'), 'click', () => { if (source) setWaveView(0, source.frames); });
+  listen(query('[data-action="wave-selection"]'), 'click', () => {
+    if (source) setWaveView(startFrame - selectionLength * 0.1, selectionLength * 1.2);
+  });
+  listen(query('[data-action="wave-pan"]'), 'click', event => {
+    wavePanMode = !wavePanMode;
+    event.currentTarget.setAttribute('aria-pressed', String(wavePanMode));
+    waveform.classList.toggle('pan-mode', wavePanMode);
+  });
+  listen(controls.wavePosition, 'input', () => setWaveView(Number(controls.wavePosition.value), waveLength));
+  listen(waveform, 'wheel', event => {
+    if (!source || query('.source-controls').disabled) return;
+    event.preventDefault();
+    const bounds = waveform.getBoundingClientRect();
+    const units = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1;
+    if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      setWaveView(waveStart + (event.deltaX || event.deltaY) * units / bounds.width * waveLength, waveLength);
+    } else {
+      zoomWave(Math.exp(Math.max(-2, Math.min(2, event.deltaY * units * 0.002))), Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)));
+    }
+  }, { passive: false });
   function selectPosition(event) {
     if (!source || query('.source-controls').disabled) return;
     const bounds = waveform.getBoundingClientRect();
-    changeSelection((event.clientX - bounds.left) / bounds.width * source.frames - selectionLength / 2);
+    changeSelection(waveStart + (event.clientX - bounds.left) / bounds.width * waveLength - selectionLength / 2);
   }
   listen(waveform, 'pointerdown', event => {
-    if (event.button !== 0) return;
+    if (!source || query('.source-controls').disabled || ![0, 1].includes(event.button)) return;
+    event.preventDefault();
+    waveform.focus({ preventScroll: true });
     waveform.setPointerCapture(event.pointerId);
-    waveformDrag = true;
-    selectPosition(event);
+    waveformDrag = { pan: wavePanMode || event.shiftKey || event.button === 1, x: event.clientX, start: waveStart };
+    if (!waveformDrag.pan) selectPosition(event);
   });
-  listen(waveform, 'pointermove', event => { if (waveformDrag) selectPosition(event); });
-  listen(waveform, 'lostpointercapture', () => { waveformDrag = false; });
+  listen(waveform, 'pointermove', event => {
+    if (!waveformDrag) return;
+    if (waveformDrag.pan) {
+      const bounds = waveform.getBoundingClientRect();
+      setWaveView(waveformDrag.start - (event.clientX - waveformDrag.x) / bounds.width * waveLength, waveLength);
+    } else selectPosition(event);
+  });
+  listen(waveform, 'lostpointercapture', () => { waveformDrag = null; });
   listen(waveform, 'keydown', event => {
     if (!source || query('.source-controls').disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
