@@ -83,7 +83,9 @@ details p { margin: 10px 0 0; }
 .source-controls input[type=number] { width: 146px; }
 .source-controls:disabled { opacity: .55; }
 .window-info { font-size: 14px; color: #b9b08a; margin-left: auto; }
-.waveform-wrap { height: 200px; background: #0b1117; border-radius: 5px; overflow: hidden; }
+.waveform-wrap { position: relative; height: 200px; background: #0b1117; border-radius: 5px; overflow: hidden; }
+.wave-selection-handle { position: absolute; width: 28px; height: 44px; padding: 0; border: 1px solid #e9cf6b; border-radius: 5px; background: #343021; color: #ffe89d; font-size: 24px; cursor: ew-resize; touch-action: none; user-select: none; }
+.wave-selection-handle:focus-visible { outline-offset: -4px; }
 .waveform { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .waveform.pan-mode { cursor: grab; }
 .waveform.pan-mode:active { cursor: grabbing; }

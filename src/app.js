@@ -63,13 +63,17 @@ export function mountWaveCurves(root) {
             </div>
             <output class="wave-view-info"></output>
           </div>
-          <div class="waveform-wrap"><canvas class="waveform" tabindex="0" role="slider" aria-label="분석 구간 위치. 좌우 화살표로 이동" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></canvas></div>
+          <div class="waveform-wrap">
+            <canvas class="waveform" tabindex="0" role="slider" aria-label="분석 구간 위치. 좌우 화살표로 이동" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></canvas>
+            <button class="wave-selection-handle" data-edge="start" aria-label="분석 구간 시작점 조절" title="드래그로 시작점 조절" hidden>⋮</button>
+            <button class="wave-selection-handle" data-edge="end" aria-label="분석 구간 끝점 조절" title="드래그로 끝점 조절" hidden>⋮</button>
+          </div>
           <div class="waveform-caption">
             <label class="wave-view-start"><input data-control="waveStartTime" type="number" value="0" min="0" step="any" aria-label="파형 보기 시작 시간" title="보이는 구간의 시작 시간 · Enter로 적용"><span>s</span></label>
             <label class="wave-view-end"><input data-control="waveEndTime" type="number" value="0" min="0" step="any" aria-label="파형 보기 끝 시간" title="보이는 구간의 끝 시간 · Enter로 적용"><span>s</span></label>
           </div>
           <label class="wave-scroll"><span>보기 위치</span><input data-control="wavePosition" type="range" min="0" max="0" value="0" step="1" aria-label="파형 보기 위치"></label>
-          <p class="waveform-help">휠: 확대·축소 · Shift+드래그 또는 이동 모드: 좌우 이동 · 클릭·드래그: 분석 구간 이동</p>
+          <p class="waveform-help">노란 구간 양끝 드래그: 길이 조절 · 클릭·드래그: 구간 이동 · 휠: 확대·축소 · Shift+드래그 또는 이동 모드: 화면 이동</p>
         </section>
       </main>
       <footer><span>선택 구간을 한 주기로 합성</span><span>마우스 드래그 · 시점 이동 &nbsp; 휠 · 확대</span></footer>
@@ -108,6 +112,7 @@ export function mountWaveCurves(root) {
   let panY = 0;
   let plotDrag;
   let waveformDrag = null;
+  let selectionResize = null;
   let waveStart = 0;
   let waveLength = 1;
   let wavePanMode = false;
@@ -232,8 +237,10 @@ export function mountWaveCurves(root) {
       waveform.dataset.detail = 'envelope';
     }
     waveContext.stroke();
-    const left = x(startFrame);
-    const right = x(startFrame + selectionLength);
+    const shownStart = selectionResize?.previewStart ?? startFrame;
+    const shownEnd = selectionResize?.previewEnd ?? (startFrame + selectionLength);
+    const left = x(shownStart);
+    const right = x(shownEnd);
     if (right >= 0 && left <= width) {
       const visibleLeft = Math.max(0, left);
       const visibleRight = Math.min(width, Math.max(right, left + 2));
@@ -246,6 +253,13 @@ export function mountWaveCurves(root) {
       if (left >= 0) { waveContext.moveTo(left + 0.5, 0); waveContext.lineTo(left + 0.5, height); }
       if (right <= width) { waveContext.moveTo(visibleRight - 0.5, 0); waveContext.lineTo(visibleRight - 0.5, height); }
       waveContext.stroke();
+    }
+    for (const [edge, px] of [['start', left], ['end', right]]) {
+      const handle = query(`[data-edge="${edge}"]`);
+      handle.hidden = px < 0 || px > width;
+      handle.style.left = `${Math.max(0, Math.min(width - 28, px - 14))}px`;
+      // Keep both grips usable even when a short interval is subpixel-wide.
+      handle.style.top = right - left < 40 ? (edge === 'start' ? '20%' : '60%') : 'calc(50% - 22px)';
     }
     const seconds = waveLength / source.sampleRate;
     controls.waveStartTime.value = (waveStart / source.sampleRate).toFixed(6);
@@ -304,17 +318,16 @@ export function mountWaveCurves(root) {
     controls.phase.value = '0';
   }
 
-  function updateSelectionInputs() {
-    const length = selectionLength;
-    controls.start.value = (startFrame / source.sampleRate).toFixed(9);
+  function updateSelectionInputs(start = startFrame, length = selectionLength) {
+    controls.start.value = (start / source.sampleRate).toFixed(9);
     controls.start.max = String((source.frames - length) / source.sampleRate);
     controls.start.step = 'any';
-    controls.end.value = ((startFrame + length) / source.sampleRate).toFixed(9);
-    controls.end.min = String((startFrame + 1) / source.sampleRate);
+    controls.end.value = ((start + length) / source.sampleRate).toFixed(9);
+    controls.end.min = String((start + 1) / source.sampleRate);
     controls.end.max = String(source.duration);
     controls.duration.value = (length / source.sampleRate).toFixed(9);
     controls.duration.min = String(1 / source.sampleRate);
-    controls.duration.max = String((source.frames - startFrame) / source.sampleRate);
+    controls.duration.max = String((source.frames - start) / source.sampleRate);
     query('.window-info').textContent = `${number.format(length)}개 샘플 · 주파수 간격 ${number.format(source.sampleRate / length)} Hz`;
   }
 
@@ -357,6 +370,7 @@ export function mountWaveCurves(root) {
   }
 
   async function loadDataset(getDataset, name, isDemo = false) {
+    finishSelectionResize(false);
     const sequence = ++loadSequence;
     controls.channel.disabled = true;
     query('.source-controls').disabled = true;
@@ -613,12 +627,82 @@ export function mountWaveCurves(root) {
     const bounds = waveform.getBoundingClientRect();
     changeSelection(waveStart + (event.clientX - bounds.left) / bounds.width * waveLength - selectionLength / 2);
   }
+  function beginSelectionResize(event, edge) {
+    if (!source || query('.source-controls').disabled || event.button !== 0 || selectionResize) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+    const bounds = waveform.getBoundingClientRect();
+    selectionResize = {
+      edge, pointerId: event.pointerId, source,
+      x: event.clientX, framesPerPixel: waveLength / bounds.width,
+      start: startFrame, end: startFrame + selectionLength,
+      previewStart: startFrame, previewEnd: startFrame + selectionLength
+    };
+    waveformDrag = null;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function previewSelectionResize(event) {
+    const drag = selectionResize;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.source !== source) { finishSelectionResize(false); return; }
+    const delta = Math.round((event.clientX - drag.x) * drag.framesPerPixel);
+    if (drag.edge === 'start') drag.previewStart = Math.max(0, Math.min(drag.end - 1, drag.start + delta));
+    else drag.previewEnd = Math.max(drag.start + 1, Math.min(source.frames, drag.end + delta));
+    updateSelectionInputs(drag.previewStart, drag.previewEnd - drag.previewStart);
+    query('.window-info').textContent += ' · 놓으면 적용';
+    drawWaveform();
+  }
+  function finishSelectionResize(apply) {
+    const drag = selectionResize;
+    if (!drag) return;
+    selectionResize = null;
+    if (apply && drag.source === source) changeSelection(drag.previewStart, drag.previewEnd - drag.previewStart);
+    if (source) { updateSelectionInputs(); drawWaveform(); }
+  }
+  for (const handle of root.querySelectorAll('[data-edge]')) {
+    listen(handle, 'pointerdown', event => beginSelectionResize(event, handle.dataset.edge));
+    listen(handle, 'keydown', event => {
+      if (!source || selectionResize || query('.source-controls').disabled || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      const delta = event.key === 'ArrowLeft' ? -1 : 1;
+      if (handle.dataset.edge === 'start') {
+        const end = startFrame + selectionLength;
+        const start = Math.max(0, Math.min(end - 1, startFrame + delta));
+        changeSelection(start, end - start);
+      } else changeSelection(startFrame, Math.max(1, Math.min(source.frames - startFrame, selectionLength + delta)));
+    });
+  }
+  listen(document, 'pointermove', previewSelectionResize);
+  listen(document, 'pointerup', event => {
+    if (selectionResize?.pointerId !== event.pointerId) return;
+    previewSelectionResize(event);
+    finishSelectionResize(true);
+  });
+  for (const type of ['pointercancel', 'lostpointercapture']) {
+    listen(document, type, event => { if (selectionResize?.pointerId === event.pointerId) finishSelectionResize(false); });
+  }
+  listen(document, 'keydown', event => {
+    if (event.key === 'Escape' && selectionResize) { event.preventDefault(); finishSelectionResize(false); }
+  });
   listen(waveform, 'pointerdown', event => {
     if (!source || query('.source-controls').disabled || ![0, 1].includes(event.button)) return;
+    const pan = wavePanMode || event.shiftKey || event.button === 1;
+    if (!pan) {
+      const bounds = waveform.getBoundingClientRect();
+      const px = event.clientX - bounds.left;
+      const left = (startFrame - waveStart) / waveLength * bounds.width;
+      const right = (startFrame + selectionLength - waveStart) / waveLength * bounds.width;
+      const distanceLeft = left >= 0 && left <= bounds.width ? Math.abs(px - left) : Infinity;
+      const distanceRight = right >= 0 && right <= bounds.width ? Math.abs(px - right) : Infinity;
+      if (Math.min(distanceLeft, distanceRight) <= 6) {
+        beginSelectionResize(event, distanceLeft < distanceRight ? 'start' : 'end');
+        return;
+      }
+    }
     event.preventDefault();
     waveform.focus({ preventScroll: true });
     waveform.setPointerCapture(event.pointerId);
-    waveformDrag = { pan: wavePanMode || event.shiftKey || event.button === 1, x: event.clientX, start: waveStart };
+    waveformDrag = { pan, x: event.clientX, start: waveStart };
     if (!waveformDrag.pan) selectPosition(event);
   });
   listen(waveform, 'pointermove', event => {
