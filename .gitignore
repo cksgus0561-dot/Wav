@@ -1,0 +1,7 @@
+.verification/
+node_modules/
+.codex/
+.codex-attachments/
+.env
+.env.*
+!.env.example

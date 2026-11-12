@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0e12">
+    <title>Wave Curves · 파동과 곡선</title>
+    <style>
+@charset "UTF-8";
+:root { color-scheme: dark; font-family: 'Geist', 'Inter', 'Segoe UI', 'Malgun Gothic', sans-serif; color: #e2e7eb; background: #0b0e12; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+button, select, input[type=range], input[type=checkbox], .file-button { cursor: pointer; }
+button { color: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, canvas:focus-visible, .file-button:focus-within { outline: 2px solid #e9cf6b; outline-offset: 4px; }
+button { border: 0; }
+button:hover { color: #fff4b2; }
+.wave-app { max-width: 1720px; margin: 0 auto; padding: 0 36px; }
+.app-header { height: 90px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #242b33; }
+.brand { display: flex; align-items: center; gap: 15px; }
+.brand-mark { color: #f2d875; font-size: 49px; line-height: 1; }
+.brand strong { display: block; font-size: 19px; letter-spacing: -.5px; font-weight: 600; }
+.brand div > span { display: block; color: #84919e; font-size: 11px; margin-top: 4px; }
+.header-actions { display: flex; align-items: center; gap: 22px; }
+.quiet { background: transparent; padding: 8px 0; color: #a6b1bc; font-size: 12px; }
+.file-button { display: inline-flex; align-items: center; position: relative; overflow: hidden; padding: 12px 20px; border: 1px solid #e9cf6b; background: #e9cf6b; color: #191a17; border-radius: 6px; font-size: 13px; font-weight: 650; }
+.file-button:hover { background: #f5df90; }
+.file-button input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 294px; gap: 0; margin-top: 26px; }
+.visual-panel { min-width: 0; background: #090c10; border: 1px solid #252d36; border-radius: 10px 0 0 10px; overflow: hidden; }
+.canvas-heading { display: flex; justify-content: space-between; align-items: center; padding: 24px 26px 0; }
+h1 { font-size: 18px; font-weight: 500; letter-spacing: -.5px; margin: 0; }
+.canvas-heading p { font-size: 11px; color: #81909d; margin: 9px 0 0; }
+.canvas-heading p span { color: #414a52; margin: 0 7px; }
+.phase-label { font-size: 12px; color: #cfbe7e; font-variant-numeric: tabular-nums; }
+.time-readout { text-align: right; display: grid; gap: 6px; margin-left: 12px; }
+.source-time { font-size: 10px; color: #96a5b1; font-variant-numeric: tabular-nums; }
+.plot { height: clamp(330px, 48vh, 650px); position: relative; }
+.curve-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.curve-canvas:active { cursor: grabbing; }
+.plot-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 25px 15px; gap: 15px; }
+.toggles { display: flex; gap: 20px; }
+.toggles label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #a3afba; white-space: nowrap; }
+input[type=checkbox] { accent-color: #e9cf6b; width: 12px; height: 12px; margin: 0; }
+.transport { display: flex; align-items: center; gap: 18px; border-top: 1px solid #242b33; padding: 16px 25px; background: #10151b; }
+.play-button { background: #e9cf6b; color: #1b1d1c; border-radius: 50%; width: 36px; height: 36px; flex-shrink: 0; font-size: 14px; font-weight: 700; }
+.play-button:hover { color: #1b1d1c; background: #ffe89d; }
+.restart { font-size: 23px; color: #9caab6; background: transparent; padding: 0; }
+.scrubber-label { flex: 1; min-width: 20px; display: flex; }
+input[type=range] { width: 100%; accent-color: #e9cf6b; height: 4px; margin: 12px 0; }
+.speed-label { display: flex; align-items: center; gap: 10px; color: #8e9aa6; font-size: 11px; white-space: nowrap; }
+select, input[type=number] { background: #11171e; border: 1px solid #303b46; color: #d1dae2; border-radius: 5px; padding: 7px 10px; font-size: 12px; }
+.speed-label select { padding: 6px; }
+.inspector { background: #11161c; border: 1px solid #252d36; border-left: 0; border-radius: 0 10px 10px 0; padding: 25px 24px; }
+.section-heading, .coefficient-heading { display: flex; align-items: center; justify-content: space-between; }
+h2 { font-size: 13px; font-weight: 550; margin: 0; }
+.chip { color: #758998; font-size: 10px; letter-spacing: 1px; }
+.component-summary { display: flex; align-items: baseline; gap: 10px; margin-top: 27px; }
+.component-summary strong { font-size: 42px; letter-spacing: -2px; color: #f2d875; font-weight: 400; font-variant-numeric: tabular-nums; }
+.component-summary span { font-size: 11px; color: #9da9b4; }
+.range-label { display: block; margin-top: 12px; }
+.range-caption { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #758391; }
+.text-button { color: #d9c781; font-size: 11px; padding: 0; background: transparent; }
+.energy { margin-top: 25px; display: flex; justify-content: space-between; font-size: 11px; color: #96a5b1; gap: 10px; }
+.energy strong { color: #c9d7dc; font-weight: 500; }
+.inspector-note { font-size: 11px; line-height: 1.8; color: #7c8b97; margin: 14px 0 24px; }
+.coefficient-heading { border-top: 1px solid #29313a; padding-top: 20px; }
+h3 { font-size: 12px; font-weight: 500; margin: 0; }
+.coefficient-heading > span { font-size: 10px; color: #718391; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; margin-top: 13px; }
+th { color: #6e8290; font-weight: 400; font-size: 10px; padding: 6px 0; }
+td { color: #b5c3cd; padding: 9px 0; border-bottom: 1px solid #202830; }
+th, td { text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+td:first-child { color: #dfd2a2; }
+details { margin-top: 22px; color: #8c9ca9; font-size: 10px; line-height: 1.9; }
+summary { cursor: pointer; color: #acb7c1; font-size: 11px; }
+details p { margin: 10px 0 0; }
+.source-panel { grid-column: 1 / -1; margin-top: 22px; border: 1px solid #252d36; border-radius: 10px; padding: 20px 25px 14px; background: #10151b; }
+.source-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.file-description { display: flex; gap: 13px; align-items: center; min-width: 0; }
+.file-description > div { min-width: 0; }
+.file-tag { color: #c3cdbf; background: #26302a; border: 1px solid #3b493e; border-radius: 5px; font-size: 10px; padding: 9px 6px; }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 65vw; }
+.file-meta { color: #82929f; font-size: 11px; margin: 6px 0 0; }
+.load-status { color: #8eab98; font-size: 11px; text-align: right; }
+.source-controls { border: 0; padding: 0; margin: 19px 0 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 12px 25px; min-width: 0; }
+.source-controls label { display: flex; align-items: center; gap: 9px; color: #8d9ca8; font-size: 11px; }
+.source-controls input[type=number] { width: 118px; }
+.source-controls:disabled { opacity: .55; }
+.window-info { font-size: 11px; color: #b9b08a; margin-left: auto; }
+.waveform-wrap { height: 76px; }
+.waveform { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.waveform-caption { display: flex; justify-content: space-between; color: #728390; font-size: 10px; margin-top: 5px; }
+footer { display: flex; justify-content: space-between; color: #627381; font-size: 10px; padding: 17px 0 22px; }
+.error { color: #ffbcb0; background: #381d1b; border: 1px solid #71453b; padding: 13px 18px; border-radius: 6px; margin-top: 16px; font-size: 13px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (min-width: 1500px) { .wave-app { padding: 0 52px; } main { grid-template-columns: minmax(0, 1fr) 320px; } }
+@media (max-width: 900px) { .wave-app { padding: 0 18px; } main { grid-template-columns: minmax(0, 1fr) 250px; } .inspector { padding: 24px 18px; } .transport { gap: 12px; } .toggles { gap: 12px; } .window-info { margin-left: 0; } }
+@media (max-width: 680px) {
+  .wave-app { padding: 0 12px; } .app-header { height: 76px; } .brand-mark { font-size: 35px; } .brand { gap: 7px; } .brand strong { font-size: 16px; }
+  .header-actions { gap: 13px; } .file-button { padding: 10px 12px; font-size: 12px; } .header-actions .quiet { font-size: 11px; }
+  main { grid-template-columns: 1fr; margin-top: 16px; gap: 14px; } .visual-panel, .inspector { border: 1px solid #252d36; border-radius: 9px; }
+  .canvas-heading { padding: 20px 17px 0; } h1 { font-size: 16px; } .plot { height: 350px; } .plot-toolbar { padding: 0 17px 10px; gap: 8px; }
+  .toggles { gap: 10px; } .toggles label { font-size: 10px; } .transport { padding: 14px 17px; } .speed-label { gap: 5px; }
+  .source-panel { margin: 0; grid-row: 2; padding: 18px 15px 13px; } .source-controls { gap: 10px 16px; } .source-heading { align-items: flex-start; }
+  .file-name { max-width: 60vw; } .load-status { max-width: 80px; } .file-meta { font-size: 10px; } .source-controls label { font-size: 10px; }
+  .inspector { grid-row: 3; } .component-summary { margin-top: 15px; } .waveform-caption { font-size: 9px; } footer { font-size: 9px; gap: 12px; }
+}
+
+</style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+// Unnormalized forward DFT, normalized inverse DFT. Both operate in place.
+function fft(real, imaginary, inverse = false) {
+  const length = real.length;
+  if (length < 1 || imaginary.length !== length) {
+    throw new Error('실수부와 허수부는 같은 길이의 비어 있지 않은 배열이어야 합니다.');
+  }
+  if ((length & (length - 1)) === 0) return radix2(real, imaginary, inverse);
+
+  // Bluestein: compute the exact length-N DFT using a linear convolution.
+  // Padding belongs only to the convolution, never to the source interval.
+  let size = 1;
+  while (size < length * 2 - 1) size *= 2;
+  const ar = new Float64Array(size);
+  const ai = new Float64Array(size);
+  const br = new Float64Array(size);
+  const bi = new Float64Array(size);
+  const sign = inverse ? 1 : -1;
+  for (let index = 0; index < length; index++) {
+    const angle = sign * Math.PI * ((index * index) % (2 * length)) / length;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    ar[index] = real[index] * cosine - imaginary[index] * sine;
+    ai[index] = real[index] * sine + imaginary[index] * cosine;
+    br[index] = cosine;
+    bi[index] = -sine;
+    if (index > 0) {
+      br[size - index] = cosine;
+      bi[size - index] = -sine;
+    }
+  }
+  radix2(ar, ai);
+  radix2(br, bi);
+  for (let index = 0; index < size; index++) {
+    const re = ar[index] * br[index] - ai[index] * bi[index];
+    ai[index] = ar[index] * bi[index] + ai[index] * br[index];
+    ar[index] = re;
+  }
+  radix2(ar, ai, true);
+  const divisor = inverse ? length : 1;
+  for (let index = 0; index < length; index++) {
+    const angle = sign * Math.PI * ((index * index) % (2 * length)) / length;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    real[index] = (ar[index] * cosine - ai[index] * sine) / divisor;
+    imaginary[index] = (ar[index] * sine + ai[index] * cosine) / divisor;
+  }
+}
+
+function radix2(real, imaginary, inverse = false) {
+  const length = real.length;
+  for (let index = 1, reversed = 0; index < length; index++) {
+    let bit = length >> 1;
+    while (reversed & bit) {
+      reversed ^= bit;
+      bit >>= 1;
+    }
+    reversed ^= bit;
+    if (index < reversed) {
+      [real[index], real[reversed]] = [real[reversed], real[index]];
+      [imaginary[index], imaginary[reversed]] = [imaginary[reversed], imaginary[index]];
+    }
+  }
+  for (let size = 2; size <= length; size *= 2) {
+    const angle = (inverse ? 2 : -2) * Math.PI / size;
+    const stepReal = Math.cos(angle);
+    const stepImaginary = Math.sin(angle);
+    for (let block = 0; block < length; block += size) {
+      let rotationReal = 1;
+      let rotationImaginary = 0;
+      for (let offset = 0; offset < size / 2; offset++) {
+        const even = block + offset;
+        const odd = even + size / 2;
+        const oddReal = real[odd] * rotationReal - imaginary[odd] * rotationImaginary;
+        const oddImaginary = real[odd] * rotationImaginary + imaginary[odd] * rotationReal;
+        real[odd] = real[even] - oddReal;
+        imaginary[odd] = imaginary[even] - oddImaginary;
+        real[even] += oddReal;
+        imaginary[even] += oddImaginary;
+        const nextReal = rotationReal * stepReal - rotationImaginary * stepImaginary;
+        rotationImaginary = rotationReal * stepImaginary + rotationImaginary * stepReal;
+        rotationReal = nextReal;
+      }
+    }
+  }
+  if (inverse) {
+    for (let index = 0; index < length; index++) {
+      real[index] /= length;
+      imaginary[index] /= length;
+    }
+  }
+}
+
+// Analytic signal: retain DC/Nyquist, double positive bins, discard negative bins.
+// At the original sample positions its real part exactly reconstructs the input.
+function analyze(samples, sampleRate) {
+  const real = Float64Array.from(samples);
+  const imaginary = new Float64Array(samples.length);
+  fft(real, imaginary);
+  const components = [];
+  for (let bin = 0; bin <= Math.floor(samples.length / 2); bin++) {
+    const isNyquist = samples.length % 2 === 0 && bin === samples.length / 2;
+    const scale = (bin === 0 || isNyquist ? 1 : 2) / samples.length;
+    const re = real[bin] * scale;
+    const im = imaginary[bin] * scale;
+    components.push({
+      bin, re, im,
+      amplitude: Math.hypot(re, im),
+      phase: Math.atan2(im, re),
+      frequency: bin * sampleRate / samples.length
+    });
+  }
+  components.sort((a, b) => b.amplitude - a.amplitude || a.bin - b.bin);
+  return { components, length: samples.length, sampleRate };
+}
+
+function makeCurve(components, sampleLength) {
+  // This is only the drawing grid; analysis bins still use the exact source N.
+  let length = 4096;
+  while (length < sampleLength * 2) length *= 2;
+  const real = new Float64Array(length);
+  const imaginary = new Float64Array(length);
+  for (const component of components) {
+    real[component.bin] = component.re * length;
+    imaginary[component.bin] = component.im * length;
+  }
+  fft(real, imaginary, true);
+  return { real, imaginary, length };
+}
+
+function evaluate(components, phase) {
+  let x = 0;
+  let y = 0;
+  for (const component of components) {
+    const angle = 2 * Math.PI * component.bin * phase + component.phase;
+    x += component.amplitude * Math.cos(angle);
+    y += component.amplitude * Math.sin(angle);
+  }
+  return { x, y };
+}
+
+
+function readWav(buffer) {
+  const view = new DataView(buffer);
+  const text = (offset, count) => {
+    let value = '';
+    for (let index = 0; index < count; index++) value += String.fromCharCode(view.getUint8(offset + index));
+    return value;
+  };
+  if (buffer.byteLength < 12 || text(0, 4) !== 'RIFF' || text(8, 4) !== 'WAVE') {
+    throw new Error('RIFF/WAVE 형식의 WAV 파일을 선택해 주세요.');
+  }
+  const end = view.getUint32(4, true) + 8;
+  if (end > buffer.byteLength || end < 12) throw new Error('WAV 파일이 잘렸거나 헤더가 손상되었습니다.');
+  let format;
+  const segments = [];
+  for (let offset = 12; offset < end;) {
+    if (offset + 8 > end) throw new Error('WAV 청크 헤더가 손상되었습니다.');
+    const id = text(offset, 4);
+    const size = view.getUint32(offset + 4, true);
+    const data = offset + 8;
+    if (data + size > end) throw new Error('WAV 데이터 길이가 파일 범위를 벗어납니다.');
+    if (id === 'fmt ') {
+      if (size < 16) throw new Error('WAV 형식 정보가 손상되었습니다.');
+      let encoding = view.getUint16(data, true);
+      const channels = view.getUint16(data + 2, true);
+      const sampleRate = view.getUint32(data + 4, true);
+      const blockAlign = view.getUint16(data + 12, true);
+      const bits = view.getUint16(data + 14, true);
+      if (encoding === 0xfffe) {
+        if (size < 40 || view.getUint16(data + 16, true) < 22) {
+          throw new Error('확장 WAV 헤더가 손상되었습니다.');
+        }
+        const guidTail = [0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113];
+        if (!guidTail.every((byte, index) => view.getUint8(data + 28 + index) === byte)) {
+          throw new Error('지원하지 않는 확장 WAV 코덱입니다.');
+        }
+        encoding = view.getUint32(data + 24, true);
+        const validBits = view.getUint16(data + 18, true);
+        if (validBits > bits) throw new Error('WAV 유효 비트 수가 잘못되었습니다.');
+      }
+      const supported = (encoding === 1 && [8, 16, 24, 32].includes(bits)) ||
+        (encoding === 3 && [32, 64].includes(bits));
+      if (!supported) throw new Error('PCM 8/16/24/32-bit 또는 IEEE float 32/64-bit WAV를 지원합니다.');
+      if (!channels || !sampleRate || blockAlign !== channels * bits / 8) {
+        throw new Error('WAV 채널·샘플레이트·샘플 크기 정보가 잘못되었습니다.');
+      }
+      format = { encoding, channels, sampleRate, blockAlign, bits };
+    }
+    if (id === 'data' && size > 0) segments.push({ offset: data, size });
+    offset = data + size + (size % 2);
+  }
+  if (!format || !segments.length) throw new Error('WAV에 형식 정보 또는 파형 데이터가 없습니다.');
+  let frames = 0;
+  for (const segment of segments) {
+    if (segment.size % format.blockAlign !== 0) throw new Error('WAV 샘플 데이터가 중간에서 잘렸습니다.');
+    segment.firstFrame = frames;
+    segment.frames = segment.size / format.blockAlign;
+    frames += segment.frames;
+  }
+  if (frames < 1) throw new Error('분석하려면 최소 1개 샘플이 필요합니다.');
+  const bytes = format.bits / 8;
+  let activeSegment = segments[0];
+  return {
+    ...format, frames, duration: frames / format.sampleRate,
+    sample(frame, channel = 0) {
+      if (!Number.isInteger(frame) || frame < 0 || frame >= frames ||
+          !Number.isInteger(channel) || channel < 0 || channel >= format.channels) {
+        throw new RangeError('샘플 또는 채널 범위를 벗어났습니다.');
+      }
+      if (frame < activeSegment.firstFrame || frame >= activeSegment.firstFrame + activeSegment.frames) {
+        activeSegment = segments.find(segment => frame >= segment.firstFrame && frame < segment.firstFrame + segment.frames);
+      }
+      const offset = activeSegment.offset + (frame - activeSegment.firstFrame) * format.blockAlign + channel * bytes;
+      let value;
+      if (format.encoding === 3) {
+        value = format.bits === 32 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
+      } else if (format.bits === 8) {
+        value = (view.getUint8(offset) - 128) / 128;
+      } else if (format.bits === 16) {
+        value = view.getInt16(offset, true) / 32768;
+      } else if (format.bits === 24) {
+        let integer = view.getUint8(offset) | (view.getUint8(offset + 1) << 8) | (view.getUint8(offset + 2) << 16);
+        if (integer & 0x800000) integer -= 0x1000000;
+        value = integer / 8388608;
+      } else {
+        value = view.getInt32(offset, true) / 2147483648;
+      }
+      if (!Number.isFinite(value)) throw new Error('WAV에 유효하지 않은 부동소수점 샘플이 있습니다.');
+      return value;
+    }
+  };
+}
+
+function makeDemo() {
+  const sampleRate = 48000;
+  const period = 2048;
+  return {
+    channels: 1, sampleRate, bits: 32, encoding: 3,
+    frames: sampleRate * 2, duration: 2,
+    sample(frame) {
+      const angle = frame * 2 * Math.PI / period;
+      return 0.48 * Math.cos(3 * angle) + 0.24 * Math.cos(7 * angle + 0.8) +
+        0.14 * Math.cos(11 * angle - 1.2) + 0.07 * Math.cos(19 * angle);
+    }
+  };
+}
+
+
+
+const TAU = Math.PI * 2;
+const number = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 });
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+
+// Independent entry point. Call destroy() before replacing this screen in a host app.
+function mountWaveCurves(root) {
+  root.innerHTML = `
+    <div class="wave-app">
+      <header class="app-header">
+        <div class="brand"><span class="brand-mark">∿</span><div><strong>Wave Curves</strong><span>파동과 곡선</span></div></div>
+        <div class="header-actions">
+          <button class="quiet" data-action="demo">예제 열기</button>
+          <label class="file-button">WAV 파일 열기<input data-control="file" type="file" accept=".wav,audio/wav,audio/x-wav"></label>
+        </div>
+      </header>
+      <div class="error" role="alert" hidden></div>
+      <main>
+        <section class="visual-panel" aria-label="파동 합성 시각화">
+          <div class="canvas-heading"><div><h1>파동이 그리는 곡선</h1><p>x · 원본 파형 <span> / </span> y · 힐베르트 변환</p></div><div class="time-readout"><output class="source-time" aria-label="선택 구간 내 원본 시간"></output><span class="phase-label">0.0%</span></div></div>
+          <div class="plot"><canvas class="curve-canvas" aria-label="푸리에 성분을 합성한 평면 곡선"></canvas></div>
+          <div class="plot-toolbar">
+            <div class="toggles"><label><input type="checkbox" data-control="circles" checked>회전 원</label><label><input type="checkbox" data-control="vectors" checked>연결선</label><label><input type="checkbox" data-control="preview" checked>전체 곡선</label></div>
+            <button class="quiet" data-action="fit">화면 맞춤</button>
+          </div>
+          <div class="transport">
+            <button class="play-button" data-action="play" aria-label="애니메이션 일시정지">Ⅱ</button>
+            <button class="restart" data-action="restart" aria-label="처음부터 그리기">↺</button>
+            <label class="scrubber-label"><span class="sr-only">애니메이션 위치</span><input data-control="phase" type="range" min="0" max="1000" value="0"></label>
+            <label class="speed-label">재생 배율<select data-control="speed"><option value="1" selected>1×</option><option value="0.5">0.5×</option><option value="0.1">0.1×</option><option value="0.01">0.01×</option><option value="0.001">0.001×</option></select></label>
+          </div>
+        </section>
+        <aside class="inspector">
+          <div class="section-heading"><h2>푸리에 성분</h2><span class="chip">FFT</span></div>
+          <div class="component-summary"><strong class="component-count">—</strong><span>개의 파동으로 합성</span></div>
+          <label class="range-label"><span class="sr-only">합성 성분 수</span><input data-control="count" type="range" min="1" max="1025" value="64"></label>
+          <div class="range-caption"><span>1개</span><button class="text-button" data-action="all">전체 사용</button></div>
+          <div class="energy"><span>성분 에너지 유지율</span><strong class="energy-value">—</strong></div>
+          <p class="inspector-note">진폭이 큰 성분부터 더합니다. 성분 수를 바꾸며 곡선의 변화를 살펴보세요.</p>
+          <div class="coefficient-heading"><h3>주요 성분</h3><span>원본 주파수</span></div>
+          <table><thead><tr><th>Hz</th><th>진폭</th><th>위상</th></tr></thead><tbody class="coefficients"></tbody></table>
+          <details><summary>곡선은 어떻게 만들어지나요?</summary><p>실수 파형의 양의 주파수 성분을 사용해 해석 신호를 만듭니다. 전체 성분을 사용하면 원래 샘플 위치에서 가로 좌표가 WAV 파형과 일치하고, 세로 좌표는 힐베르트 변환값입니다.</p><p>각 성분의 회전각은 2π × 주파수(Hz) × 구간 내 원본 시간(초) + 초기 위상입니다. 1×에서는 화면 1초 동안 원본 시간도 1초 진행합니다. 같은 배율에서는 구간 길이에 관계없이 같은 주파수가 같은 속도로 회전합니다. 선택 구간의 끝에 도달하면 처음부터 반복합니다.</p><p>빠른 회전을 살펴보려면 재생 배율을 낮추세요. 원 가이드는 진폭이 큰 64개까지 표시합니다. 연결선과 곡선에는 선택한 모든 성분을 반영합니다.</p></details>
+        </aside>
+        <section class="source-panel" aria-label="WAV 파형 및 분석 구간">
+          <div class="source-heading"><div class="file-description"><span class="file-tag">WAV</span><div><h2 class="file-name">불러오는 중</h2><p class="file-meta">원본 샘플레이트 유지</p></div></div><span class="load-status" role="status" aria-live="polite"></span></div>
+          <fieldset class="source-controls">
+            <label>채널<select data-control="channel"><option>채널 1</option></select></label>
+            <label>시작 위치<input data-control="start" type="number" value="0" min="0" step="0.001"><span>초</span></label>
+            <label>끝 위치<input data-control="end" type="number" min="0" step="any"><span>초</span></label>
+            <label>구간 길이<input data-control="duration" type="number" min="0" step="any"><span>초</span></label>
+            <output class="window-info"></output>
+          </fieldset>
+          <div class="waveform-wrap"><canvas class="waveform" tabindex="0" role="slider" aria-label="분석 구간 위치. 좌우 화살표로 이동" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"></canvas></div>
+          <div class="waveform-caption"><span>0:00</span><span>파형을 클릭하거나 드래그해 분석 구간 이동</span><span class="duration">0:00</span></div>
+        </section>
+      </main>
+      <footer><span>선택 구간을 한 주기로 합성</span><span>마우스 드래그 · 시점 이동 &nbsp; 휠 · 확대</span></footer>
+    </div>`;
+
+  const query = selector => root.querySelector(selector);
+  const controls = Object.fromEntries([...root.querySelectorAll('[data-control]')].map(element => [element.dataset.control, element]));
+  const canvas = query('.curve-canvas');
+  const context = canvas.getContext('2d');
+  const waveform = query('.waveform');
+  const waveContext = waveform.getContext('2d');
+  const abort = new AbortController();
+  const listen = (element, event, handler, options = {}) => element.addEventListener(event, handler, { ...options, signal: abort.signal });
+  let disposed = false;
+  let loadSequence = 0;
+  let source;
+  let envelope;
+  let channel = 0;
+  let startFrame = 0;
+  let selectionLength = 2048;
+  let analysis;
+  let components = [];
+  let curve;
+  let outline;
+  let centerX = 0;
+  let centerY = 0;
+  let radius = 1;
+  let sourceTime = 0;
+  let playbackRate = Number(controls.speed.value);
+  let playing = true;
+  let previousTime = performance.now();
+  let frameId;
+  let zoom = 1;
+  let panX = 0;
+  let panY = 0;
+  let plotDrag;
+  let waveformDrag = false;
+
+  function showError(error) {
+    query('.error').textContent = error.message;
+    query('.error').hidden = false;
+  }
+
+  function fitCanvas(target) {
+    const rect = target.getBoundingClientRect();
+    const ratio = Math.min(devicePixelRatio || 1, 2);
+    target.width = Math.max(1, Math.round(rect.width * ratio));
+    target.height = Math.max(1, Math.round(rect.height * ratio));
+    return { width: rect.width, height: rect.height, ratio };
+  }
+
+  async function buildEnvelope(dataset, selectedChannel, sequence) {
+    const bins = Math.min(1600, dataset.frames);
+    const values = [];
+    let peak = 0;
+    for (let bin = 0; bin < bins; bin++) {
+      let low = Infinity;
+      let high = -Infinity;
+      const first = Math.floor(bin * dataset.frames / bins);
+      const last = Math.floor((bin + 1) * dataset.frames / bins);
+      for (let frame = first; frame < last; frame++) {
+        const value = dataset.sample(frame, selectedChannel);
+        low = Math.min(low, value);
+        high = Math.max(high, value);
+      }
+      peak = Math.max(peak, Math.abs(low), Math.abs(high));
+      values.push({ low, high });
+      if (bin % 64 === 0) {
+        await nextFrame();
+        if (disposed || sequence !== loadSequence) return null;
+      }
+    }
+    return { values, peak: peak || 1 };
+  }
+
+  function drawWaveform() {
+    const { width, height } = fitCanvas(waveform);
+    const scale = waveform.width / width;
+    waveContext.setTransform(scale, 0, 0, scale, 0, 0);
+    waveContext.clearRect(0, 0, width, height);
+    if (!source || !envelope) return;
+    waveContext.strokeStyle = '#607981';
+    waveContext.lineWidth = 1;
+    waveContext.beginPath();
+    for (let index = 0; index < envelope.values.length; index++) {
+      const x = index / envelope.values.length * width;
+      const { low, high } = envelope.values[index];
+      waveContext.moveTo(x, height / 2 - high / envelope.peak * height * 0.42);
+      waveContext.lineTo(x, height / 2 - low / envelope.peak * height * 0.42 + 0.5);
+    }
+    waveContext.stroke();
+    const left = startFrame / source.frames * width;
+    const selectionWidth = Math.max(2, selectionLength / source.frames * width);
+    waveContext.fillStyle = '#e9cf6b26';
+    waveContext.fillRect(left, 0, selectionWidth, height);
+    waveContext.strokeStyle = '#e9cf6b';
+    waveContext.strokeRect(left + 0.5, 0.5, selectionWidth, height - 1);
+    waveform.setAttribute('aria-valuemax', String(source.duration));
+    waveform.setAttribute('aria-valuenow', String(startFrame / source.sampleRate));
+    waveform.setAttribute('aria-valuetext', `${(startFrame / source.sampleRate).toFixed(6)}초부터 ${selectionLength}개 샘플`);
+  }
+
+  function rebuildCurve() {
+    if (!analysis) return;
+    const count = Math.min(Number(controls.count.value), analysis.components.length);
+    components = analysis.components.slice(0, count);
+    curve = makeCurve(components, analysis.length);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    outline = new Path2D();
+    for (let index = 0; index < curve.length; index++) {
+      const x = curve.real[index];
+      const y = curve.imaginary[index];
+      if (index === 0) outline.moveTo(x, y);
+      else outline.lineTo(x, y);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    outline.closePath();
+    centerX = (minX + maxX) / 2;
+    centerY = (minY + maxY) / 2;
+    radius = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 0.01);
+    const totalEnergy = analysis.components.reduce((sum, item) => sum + item.amplitude ** 2, 0);
+    const usedEnergy = components.reduce((sum, item) => sum + item.amplitude ** 2, 0);
+    query('.component-count').textContent = number.format(count);
+    query('.energy-value').textContent = `${(totalEnergy ? usedEnergy / totalEnergy * 100 : 100).toFixed(2)}%`;
+    query('.coefficients').innerHTML = components.slice(0, 6).map(item => `<tr><td>${number.format(item.frequency)}</td><td>${item.amplitude.toFixed(4)}</td><td>${(item.phase * 180 / Math.PI).toFixed(1)}°</td></tr>`).join('');
+    if (totalEnergy < 1e-24) query('.load-status').textContent = '선택 구간이 무음입니다. 곡선은 한 점입니다.';
+    else query('.load-status').textContent = '분석 완료';
+    sourceTime = 0;
+    previousTime = performance.now();
+    controls.phase.value = '0';
+  }
+
+  function updateSelectionInputs() {
+    const length = selectionLength;
+    controls.start.value = (startFrame / source.sampleRate).toFixed(9);
+    controls.start.max = String((source.frames - length) / source.sampleRate);
+    controls.start.step = 'any';
+    controls.end.value = ((startFrame + length) / source.sampleRate).toFixed(9);
+    controls.end.min = String((startFrame + 1) / source.sampleRate);
+    controls.end.max = String(source.duration);
+    controls.duration.value = (length / source.sampleRate).toFixed(9);
+    controls.duration.min = String(1 / source.sampleRate);
+    controls.duration.max = String((source.frames - startFrame) / source.sampleRate);
+    query('.window-info').textContent = `${number.format(length)}개 샘플 · 주파수 간격 ${number.format(source.sampleRate / length)} Hz`;
+  }
+
+  function analyzeSelection() {
+    if (!source) return;
+    const length = selectionLength;
+    startFrame = Math.max(0, Math.min(source.frames - length, startFrame));
+    const samples = Float64Array.from({ length }, (_, index) => source.sample(startFrame + index, channel));
+    const nextAnalysis = analyze(samples, source.sampleRate);
+    if (nextAnalysis.components.some(item => !Number.isFinite(item.amplitude))) {
+      throw new Error('샘플 값이 너무 커서 분석할 수 없습니다.');
+    }
+    analysis = nextAnalysis;
+    updateSelectionInputs();
+    controls.count.max = String(analysis.components.length);
+    controls.count.value = String(Math.min(Number(controls.count.value), analysis.components.length));
+    rebuildCurve();
+    drawWaveform();
+  }
+
+  function changeSelection(nextStart, nextLength = selectionLength) {
+    if (!source || query('.source-controls').disabled) return;
+    const previousStart = startFrame;
+    const previousLength = selectionLength;
+    selectionLength = Math.max(1, Math.min(source.frames, Math.round(nextLength)));
+    startFrame = Math.max(0, Math.min(source.frames - selectionLength, Math.round(nextStart)));
+    if (startFrame === previousStart && selectionLength === previousLength) {
+      updateSelectionInputs();
+      return;
+    }
+    try {
+      analyzeSelection();
+      query('.error').hidden = true;
+    } catch (error) {
+      startFrame = previousStart;
+      selectionLength = previousLength;
+      analyzeSelection();
+      showError(error);
+    }
+  }
+
+  async function loadDataset(getDataset, name, isDemo = false) {
+    const sequence = ++loadSequence;
+    controls.channel.disabled = true;
+    query('.source-controls').disabled = true;
+    query('.error').hidden = true;
+    query('.load-status').textContent = '파형 읽는 중…';
+    try {
+      const dataset = await getDataset();
+      if (disposed || sequence !== loadSequence) return;
+      const nextEnvelope = await buildEnvelope(dataset, 0, sequence);
+      if (!nextEnvelope || disposed || sequence !== loadSequence) return;
+      source = dataset;
+      envelope = nextEnvelope;
+      channel = 0;
+      startFrame = 0;
+      controls.channel.innerHTML = Array.from({ length: source.channels }, (_, index) => `<option value="${index}">채널 ${index + 1}</option>`).join('');
+      selectionLength = Math.min(selectionLength, source.frames);
+      query('.file-name').textContent = name;
+      query('.file-tag').textContent = isDemo ? '예제' : 'WAV';
+      query('.file-meta').textContent = `${number.format(source.sampleRate)} Hz · ${source.bits}-bit ${source.encoding === 3 ? 'float' : 'PCM'} · ${source.channels}채널 · ${number.format(source.duration)}초`;
+      query('.duration').textContent = `${Math.floor(source.duration / 60)}:${String(Math.floor(source.duration % 60)).padStart(2, '0')}`;
+      zoom = 1;
+      panX = panY = 0;
+      analyzeSelection();
+      root.dataset.ready = 'true';
+    } catch (error) {
+      if (sequence === loadSequence && !disposed) {
+        showError(error);
+        query('.load-status').textContent = source ? '기존 파형 표시 중' : '파일 열기 실패';
+      }
+    } finally {
+      if (sequence === loadSequence && !disposed) {
+        controls.channel.disabled = false;
+        query('.source-controls').disabled = false;
+      }
+    }
+  }
+
+  listen(controls.file, 'change', () => {
+    const file = controls.file.files[0];
+    controls.file.value = '';
+    if (!file) return;
+    loadDataset(async () => {
+      if (file.size > 512 * 1024 * 1024) throw new Error('현재는 512 MB 이하의 WAV 파일을 열 수 있습니다.');
+      return readWav(await file.arrayBuffer());
+    }, file.name);
+  });
+  listen(query('[data-action="demo"]'), 'click', () => loadDataset(() => makeDemo(), '합성 파동 · 예제', true));
+  listen(controls.channel, 'change', async () => {
+    const selected = Number(controls.channel.value);
+    const sequence = ++loadSequence;
+    query('.source-controls').disabled = true;
+    query('.error').hidden = true;
+    query('.load-status').textContent = '채널 읽는 중…';
+    try {
+      const nextEnvelope = await buildEnvelope(source, selected, sequence);
+      if (!nextEnvelope || disposed || sequence !== loadSequence) return;
+      channel = selected;
+      envelope = nextEnvelope;
+      analyzeSelection();
+    } catch (error) {
+      if (sequence === loadSequence && !disposed) {
+        controls.channel.value = String(channel);
+        showError(error);
+        query('.load-status').textContent = '기존 채널 표시 중';
+      }
+    } finally {
+      if (sequence === loadSequence && !disposed) query('.source-controls').disabled = false;
+    }
+  });
+  listen(controls.start, 'change', () => {
+    const seconds = controls.start.valueAsNumber;
+    if (!source) return;
+    if (Number.isFinite(seconds)) changeSelection(seconds * source.sampleRate);
+    else updateSelectionInputs();
+  });
+  listen(controls.end, 'change', () => {
+    const seconds = controls.end.valueAsNumber;
+    if (!source) return;
+    if (Number.isFinite(seconds)) {
+      const endFrame = Math.max(startFrame + 1, Math.min(source.frames, Math.round(seconds * source.sampleRate)));
+      changeSelection(startFrame, endFrame - startFrame);
+    } else updateSelectionInputs();
+  });
+  listen(controls.duration, 'change', () => {
+    const seconds = controls.duration.valueAsNumber;
+    if (!source) return;
+    if (Number.isFinite(seconds)) {
+      changeSelection(startFrame, Math.min(source.frames - startFrame, Math.round(seconds * source.sampleRate)));
+    } else updateSelectionInputs();
+  });
+  listen(controls.count, 'input', rebuildCurve);
+  listen(query('[data-action="all"]'), 'click', () => {
+    controls.count.value = controls.count.max;
+    rebuildCurve();
+  });
+  function updatePlay() {
+    const button = query('[data-action="play"]');
+    button.textContent = playing ? 'Ⅱ' : '▶';
+    button.setAttribute('aria-label', playing ? '애니메이션 일시정지' : '애니메이션 재생');
+  }
+  function advanceClock() {
+    const now = performance.now();
+    const elapsedSeconds = (now - previousTime) / 1000;
+    previousTime = now;
+    if (playing && analysis && !document.hidden && !query('.source-controls').disabled) {
+      const duration = analysis.length / analysis.sampleRate;
+      sourceTime = (sourceTime + elapsedSeconds * playbackRate) % duration;
+    }
+  }
+  listen(query('[data-action="play"]'), 'click', () => {
+    advanceClock();
+    playing = !playing;
+    updatePlay();
+  });
+  listen(controls.speed, 'change', () => {
+    advanceClock();
+    playbackRate = Number(controls.speed.value);
+  });
+  listen(document, 'visibilitychange', () => { previousTime = performance.now(); });
+  listen(query('[data-action="restart"]'), 'click', () => {
+    sourceTime = 0;
+    previousTime = performance.now();
+    controls.phase.value = '0';
+  });
+  listen(controls.phase, 'input', () => {
+    if (!analysis) return;
+    sourceTime = Number(controls.phase.value) / 1000 * analysis.length / analysis.sampleRate;
+    previousTime = performance.now();
+    playing = false;
+    updatePlay();
+  });
+  listen(query('[data-action="fit"]'), 'click', () => { zoom = 1; panX = panY = 0; });
+  listen(canvas, 'wheel', event => {
+    event.preventDefault();
+    zoom = Math.max(0.2, Math.min(12, zoom * Math.exp(-event.deltaY * 0.001)));
+  }, { passive: false });
+  listen(canvas, 'pointerdown', event => {
+    if (event.button !== 0) return;
+    canvas.setPointerCapture(event.pointerId);
+    plotDrag = { x: event.clientX, y: event.clientY };
+  });
+  listen(canvas, 'pointermove', event => {
+    if (!plotDrag) return;
+    panX += event.clientX - plotDrag.x;
+    panY += event.clientY - plotDrag.y;
+    plotDrag = { x: event.clientX, y: event.clientY };
+  });
+  listen(canvas, 'lostpointercapture', () => { plotDrag = null; });
+  function selectPosition(event) {
+    if (!source || query('.source-controls').disabled) return;
+    const bounds = waveform.getBoundingClientRect();
+    changeSelection((event.clientX - bounds.left) / bounds.width * source.frames - selectionLength / 2);
+  }
+  listen(waveform, 'pointerdown', event => {
+    if (event.button !== 0) return;
+    waveform.setPointerCapture(event.pointerId);
+    waveformDrag = true;
+    selectPosition(event);
+  });
+  listen(waveform, 'pointermove', event => { if (waveformDrag) selectPosition(event); });
+  listen(waveform, 'lostpointercapture', () => { waveformDrag = false; });
+  listen(waveform, 'keydown', event => {
+    if (!source || query('.source-controls').disabled || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') changeSelection(0);
+    else if (event.key === 'End') changeSelection(source.frames);
+    else changeSelection(startFrame + (event.key === 'ArrowLeft' ? -1 : 1) * Math.max(1, Math.round(selectionLength / 4)));
+  });
+
+  function render() {
+    if (disposed) return;
+    advanceClock();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const ratio = canvas.width / Math.max(width, 1);
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, width, height);
+    if (curve) {
+      const duration = analysis.length / analysis.sampleRate;
+      const phase = sourceTime / duration;
+      const scale = Math.min(width, height) * 0.34 / radius * zoom;
+      const originX = width / 2 + panX - centerX * scale;
+      const originY = height / 2 + panY + centerY * scale;
+      context.strokeStyle = '#1a232c';
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(originX, 0); context.lineTo(originX, height);
+      context.moveTo(0, originY); context.lineTo(width, originY);
+      context.stroke();
+      context.save();
+      context.translate(originX, originY);
+      context.scale(scale, -scale);
+      if (controls.preview.checked) {
+        context.lineWidth = 1 / scale;
+        context.strokeStyle = '#bcae5942';
+        context.stroke(outline);
+      }
+      let x = 0;
+      let y = 0;
+      const chain = new Path2D();
+      chain.moveTo(0, 0);
+      for (let index = 0; index < components.length; index++) {
+        const component = components[index];
+        if (controls.circles.checked && index < 64 && component.bin !== 0 && component.amplitude * scale > 0.6) {
+          context.beginPath();
+          context.arc(x, y, component.amplitude, 0, TAU);
+          context.strokeStyle = index < 3 ? '#7fc3d353' : '#7fc3d32c';
+          context.lineWidth = 0.8 / scale;
+          context.stroke();
+        }
+        const angle = TAU * component.frequency * sourceTime + component.phase;
+        x += component.amplitude * Math.cos(angle);
+        y += component.amplitude * Math.sin(angle);
+        chain.lineTo(x, y);
+      }
+      if (controls.vectors.checked) {
+        context.lineWidth = 1 / scale;
+        context.strokeStyle = '#c7d6dc9c';
+        context.stroke(chain);
+      }
+      const end = Math.floor(phase * (curve.length - 1));
+      context.beginPath();
+      context.moveTo(curve.real[0], curve.imaginary[0]);
+      for (let index = 1; index <= end; index++) context.lineTo(curve.real[index], curve.imaginary[index]);
+      context.lineTo(x, y);
+      context.strokeStyle = '#f2d875';
+      context.lineWidth = 1.6 / scale;
+      context.stroke();
+      context.fillStyle = '#fff4bc';
+      context.beginPath();
+      context.arc(x, y, 3.2 / scale, 0, TAU);
+      context.fill();
+      context.restore();
+      controls.phase.value = String(Math.round(phase * 1000));
+      query('.phase-label').textContent = `${(phase * 100).toFixed(1)}%`;
+      query('.source-time').textContent = `${sourceTime.toFixed(6)} / ${duration.toFixed(6)} s`;
+      canvas.dataset.phase = phase.toFixed(5);
+      canvas.dataset.sourceTime = String(sourceTime);
+    }
+    frameId = requestAnimationFrame(render);
+  }
+  const observer = new ResizeObserver(() => { fitCanvas(canvas); drawWaveform(); });
+  observer.observe(query('.plot'));
+  observer.observe(query('.waveform-wrap'));
+  fitCanvas(canvas);
+  frameId = requestAnimationFrame(render);
+  loadDataset(() => makeDemo(), '합성 파동 · 예제', true);
+  return {
+    destroy() {
+      disposed = true;
+      loadSequence++;
+      abort.abort();
+      cancelAnimationFrame(frameId);
+      observer.disconnect();
+      root.replaceChildren();
+      delete root.dataset.ready;
+    }
+  };
+}
+
+mountWaveCurves(document.querySelector('#app'));
+</script>
+  </body>
+</html>
