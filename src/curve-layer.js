@@ -10,11 +10,10 @@ export function createCurveLayer(curve, width, height, transform) {
   context.strokeStyle = '#f2d875';
   context.lineWidth = 1.6 / scale;
   let drawn = 0;
-  let closed = false;
   return {
     canvas,
     get drawn() { return drawn; },
-    advance(target, close = false) {
+    advance(target) {
       target = Math.min(curve.length - 1, target);
       if (target < drawn) {
         context.save();
@@ -22,7 +21,6 @@ export function createCurveLayer(curve, width, height, transform) {
         context.clearRect(0, 0, width, height);
         context.restore();
         drawn = 0;
-        closed = false;
       }
       const started = performance.now();
       // Both a time budget and a work bound keep input and animation responsive.
@@ -36,13 +34,6 @@ export function createCurveLayer(curve, width, height, transform) {
         context.stroke();
         drawn = end;
         if (performance.now() - started > 8) break;
-      }
-      if (close && drawn === curve.length - 1 && !closed) {
-        context.beginPath();
-        context.moveTo(curve.real[drawn], curve.imaginary[drawn]);
-        context.lineTo(curve.real[0], curve.imaginary[0]);
-        context.stroke();
-        closed = true;
       }
       return drawn === target;
     }

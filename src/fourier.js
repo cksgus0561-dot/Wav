@@ -90,8 +90,9 @@ function radix2(real, imaginary, inverse = false) {
   }
 }
 
-// Analytic signal: retain DC/Nyquist, double positive bins, discard negative bins.
-// At the original sample positions its real part exactly reconstructs the input.
+// One rotating complex component per real sinusoid. A real sinusoid's FFT
+// coefficient pair carries half its amplitude on each side; recover that
+// amplitude with 2/N. DC and the unpaired even-N Nyquist bin use 1/N.
 export function analyze(samples, sampleRate) {
   const real = Float64Array.from(samples);
   const imaginary = new Float64Array(samples.length);
@@ -113,25 +114,31 @@ export function analyze(samples, sampleRate) {
   return { components, length: samples.length, sampleRate };
 }
 
-export function makeCurve(components, sampleLength) {
+export function makeCurve(components, sampleLength, sampleRate) {
   // This is only the drawing grid; analysis bins still use the exact source N.
   let length = 4096;
   while (length < sampleLength * 2) length *= 2;
-  const real = new Float64Array(length);
-  const imaginary = new Float64Array(length);
+  const real = new Float64Array(length + 1);
+  const imaginary = new Float64Array(length + 1);
   for (const component of components) {
     real[component.bin] = component.re * length;
     imaginary[component.bin] = component.im * length;
   }
-  fft(real, imaginary, true);
-  return { real, imaginary, length };
+  // Evaluate the same exponential sum efficiently on an evenly spaced grid.
+  fft(real.subarray(0, length), imaginary.subarray(0, length), true);
+  // Include the actual sum at the end time; never copy the first point or
+  // ask the renderer to close the path independently of the signal.
+  const endpoint = evaluate(components, sampleLength / sampleRate);
+  real[length] = endpoint.x;
+  imaginary[length] = endpoint.y;
+  return { real, imaginary, length: length + 1, segments: length };
 }
 
-export function evaluate(components, phase) {
+export function evaluate(components, timeSeconds) {
   let x = 0;
   let y = 0;
   for (const component of components) {
-    const angle = 2 * Math.PI * component.bin * phase + component.phase;
+    const angle = 2 * Math.PI * component.frequency * timeSeconds + component.phase;
     x += component.amplitude * Math.cos(angle);
     y += component.amplitude * Math.sin(angle);
   }

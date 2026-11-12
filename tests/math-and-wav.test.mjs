@@ -35,15 +35,18 @@ test('arbitrary-length analytic signal reconstructs samples and drawing grid', (
     const { components } = analyze(samples, 44100);
     assert.equal(components.length, Math.floor(length / 2) + 1);
     for (const component of components) close(component.frequency, component.bin * 44100 / length);
-    samples.forEach((value, index) => close(evaluate(components, index / length).x, value));
-    const curve = makeCurve(components, length);
+    samples.forEach((value, index) => close(evaluate(components, index / 44100).x, value));
+    const curve = makeCurve(components, length, 44100);
     for (let index = 0; index < curve.length; index += 137) {
-      const point = evaluate(components, index / curve.length);
+      const point = evaluate(components, index / curve.segments * length / 44100);
       close(curve.real[index], point.x);
       close(curve.imaginary[index], point.y);
     }
-    close(evaluate(components, 0).x, evaluate(components, 1).x);
-    close(evaluate(components, 0).y, evaluate(components, 1).y);
+    const endpoint = evaluate(components, length / 44100);
+    close(curve.real.at(-1), endpoint.x);
+    close(curve.imaginary.at(-1), endpoint.y);
+    close(evaluate(components, 0).x, endpoint.x);
+    close(evaluate(components, 0).y, endpoint.y);
   }
 });
 
@@ -74,13 +77,13 @@ test('WAV with one frame is a valid constant curve', () => {
 test('analytic signal reconstructs every real sample including DC and Nyquist', () => {
   const samples = Float64Array.from({ length: 256 }, (_, i) => 0.17 + 0.1 * (-1) ** i + 0.6 * Math.sin(i * 0.49));
   const { components } = analyze(samples, 48000);
-  const curve = makeCurve(components, samples.length);
+  const curve = makeCurve(components, samples.length, 48000);
   samples.forEach((expected, index) => {
-    close(evaluate(components, index / samples.length).x, expected);
-    close(curve.real[index * curve.length / samples.length], expected);
+    close(evaluate(components, index / 48000).x, expected);
+    close(curve.real[index * curve.segments / samples.length], expected);
   });
   const beginning = evaluate(components, 0);
-  const ending = evaluate(components, 1);
+  const ending = evaluate(components, samples.length / 48000);
   close(beginning.x, ending.x);
   close(beginning.y, ending.y);
 });
@@ -92,7 +95,7 @@ test('sinusoid has correct amplitude, phase, and Hilbert quadrature', () => {
   close(components[0].amplitude, 0.8);
   close(components[0].phase, 0.4);
   for (let index = 0; index < 128; index++) {
-    close(evaluate(components, index / 128).y, 0.8 * Math.sin(2 * Math.PI * 7 * index / 128 + 0.4));
+    close(evaluate(components, index / 96000).y, 0.8 * Math.sin(2 * Math.PI * 7 * index / 128 + 0.4));
   }
 });
 
@@ -105,6 +108,48 @@ test('silence and constant signals produce a point', () => {
       close(point.y, 0);
     }
   }
+});
+
+test('amplitude-ranked FFT sinusoids retain amplitude, frequency and phase when selected', () => {
+  const sampleRate = 800;
+  const length = 100;
+  const waves = [
+    { amplitude: 0.7, frequency: 24, phase: 0.4 },
+    { amplitude: 0.3, frequency: 8, phase: -0.8 },
+    { amplitude: 0.1, frequency: 56, phase: 1.1 }
+  ];
+  const samples = Float64Array.from({ length }, (_, n) => waves.reduce((sum, wave) =>
+    sum + wave.amplitude * Math.cos(2 * Math.PI * wave.frequency * n / sampleRate + wave.phase), 0));
+  const { components } = analyze(samples, sampleRate);
+  for (let count = 1; count <= waves.length; count++) {
+    const actualWave = components[count - 1];
+    const expectedWave = waves[count - 1];
+    close(actualWave.amplitude, expectedWave.amplitude);
+    close(actualWave.frequency, expectedWave.frequency);
+    close(actualWave.phase, expectedWave.phase);
+    const selected = components.slice(0, count);
+    const curve = makeCurve(selected, length, sampleRate);
+    for (const index of [0, 23, 1777, curve.segments]) {
+      const t = index / curve.segments * length / sampleRate;
+      const expected = waves.slice(0, count).reduce((sum, wave) => {
+        const angle = 2 * Math.PI * wave.frequency * t + wave.phase;
+        return { x: sum.x + wave.amplitude * Math.cos(angle), y: sum.y + wave.amplitude * Math.sin(angle) };
+      }, { x: 0, y: 0 });
+      const point = evaluate(selected, t);
+      close(point.x, expected.x);
+      close(point.y, expected.y);
+      close(curve.real[index], expected.x);
+      close(curve.imaginary[index], expected.y);
+    }
+  }
+});
+
+test('complex sum uses Hz and seconds without wrapping time or forcing closure', () => {
+  const waves = [{ amplitude: 0.7, frequency: 0.25, phase: 0 }];
+  const point = evaluate(waves, 1);
+  close(point.x, 0);
+  close(point.y, 0.7);
+  close(evaluate(waves, 2).x, -0.7);
 });
 
 for (const [encoding, bits] of [[1, 8], [1, 16], [1, 24], [1, 32], [3, 32], [3, 64]]) {
