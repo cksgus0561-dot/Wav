@@ -29,13 +29,20 @@ test(`length-${length} FFT matches direct DFT, and inverse restores complex inpu
 });
 }
 
-test('arbitrary-length analytic signal reconstructs samples and drawing grid', () => {
+test('all FFT coefficients reconstruct samples and the signed-frequency drawing grid', () => {
   for (const length of [1, 3, 6, 17, 255, 1000]) {
     const samples = Float64Array.from({ length }, (_, index) => 0.17 + 0.6 * Math.sin(index * 0.49));
     const { components } = analyze(samples, 44100);
-    assert.equal(components.length, Math.floor(length / 2) + 1);
-    for (const component of components) close(component.frequency, component.bin * 44100 / length);
-    samples.forEach((value, index) => close(evaluate(components, index / 44100).x, value));
+    assert.equal(components.length, length);
+    for (const component of components) {
+      const signedBin = component.bin < Math.ceil(length / 2) ? component.bin : component.bin - length;
+      close(component.frequency, signedBin * 44100 / length);
+    }
+    samples.forEach((value, index) => {
+      const point = evaluate(components, index / 44100);
+      close(point.x, value);
+      close(point.y, 0);
+    });
     const curve = makeCurve(components, length, 44100);
     for (let index = 0; index < curve.length; index += 137) {
       const point = evaluate(components, index / curve.segments * length / 44100);
@@ -50,15 +57,25 @@ test('arbitrary-length analytic signal reconstructs samples and drawing grid', (
   }
 });
 
-test('highest positive bin of odd lengths is doubled; even Nyquist is not', () => {
+test('odd highest-frequency pair and even Nyquist keep their original FFT coefficients', () => {
   for (const length of [3, 17, 97, 4801, 4800, 48000]) {
     const bin = Math.floor(length / 2);
     const phase = length % 2 ? 0.4 : 0;
     const samples = Float64Array.from({ length }, (_, index) => 0.7 * Math.cos(2 * Math.PI * bin * index / length + phase));
     const { components } = analyze(samples, 48000);
-    assert.equal(components[0].bin, bin);
-    close(components[0].amplitude, 0.7);
-    close(components[0].phase, phase);
+    const component = components.find(item => item.bin === bin);
+    const magnitude = length % 2 ? 0.35 : 0.7;
+    close(component.re, magnitude * Math.cos(phase));
+    close(component.im, magnitude * Math.sin(phase));
+    if (length % 2) {
+      const opposite = components.find(item => item.bin === length - bin);
+      close(opposite.re, component.re);
+      close(opposite.im, -component.im);
+      close(opposite.frequency, -component.frequency);
+    } else {
+      close(component.frequency, -24000);
+      close(evaluate(components, 0.5 / 48000).y, -0.7);
+    }
   }
 });
 
@@ -74,12 +91,13 @@ test('WAV with one frame is a valid constant curve', () => {
   close(evaluate(components, 0.73).y, 0);
 });
 
-test('analytic signal reconstructs every real sample including DC and Nyquist', () => {
+test('full coefficient sum reconstructs every real sample including DC and Nyquist', () => {
   const samples = Float64Array.from({ length: 256 }, (_, i) => 0.17 + 0.1 * (-1) ** i + 0.6 * Math.sin(i * 0.49));
   const { components } = analyze(samples, 48000);
   const curve = makeCurve(components, samples.length, 48000);
   samples.forEach((expected, index) => {
     close(evaluate(components, index / 48000).x, expected);
+    close(evaluate(components, index / 48000).y, 0);
     close(curve.real[index * curve.segments / samples.length], expected);
   });
   const beginning = evaluate(components, 0);
@@ -88,14 +106,20 @@ test('analytic signal reconstructs every real sample including DC and Nyquist', 
   close(beginning.y, ending.y);
 });
 
-test('sinusoid has correct amplitude, phase, and Hilbert quadrature', () => {
+test('real sinusoid retains both conjugate coefficients without doubling either', () => {
   const samples = Float64Array.from({ length: 128 }, (_, n) => 0.8 * Math.cos(2 * Math.PI * 7 * n / 128 + 0.4));
   const { components } = analyze(samples, 96000);
-  assert.equal(components[0].bin, 7);
-  close(components[0].amplitude, 0.8);
-  close(components[0].phase, 0.4);
-  for (let index = 0; index < 128; index++) {
-    close(evaluate(components, index / 96000).y, 0.8 * Math.sin(2 * Math.PI * 7 * index / 128 + 0.4));
+  const positive = components.find(item => item.bin === 7);
+  const negative = components.find(item => item.bin === 121);
+  close(positive.re, 0.4 * Math.cos(0.4));
+  close(positive.im, 0.4 * Math.sin(0.4));
+  close(negative.re, positive.re);
+  close(negative.im, -positive.im);
+  for (const index of [0, 0.3, 1, 31.7, 127, 128]) {
+    close(evaluate(components, index / 96000).x, 0.8 * Math.cos(2 * Math.PI * 7 * index / 128 + 0.4));
+    close(evaluate(components, index / 96000).y, 0);
+    close(evaluate([positive], index / 96000).y, 0.4 * Math.sin(2 * Math.PI * 7 * index / 128 + 0.4));
+    close(evaluate([negative], index / 96000).y, -0.4 * Math.sin(2 * Math.PI * 7 * index / 128 + 0.4));
   }
 });
 
@@ -110,7 +134,7 @@ test('silence and constant signals produce a point', () => {
   }
 });
 
-test('amplitude-ranked FFT sinusoids retain amplitude, frequency and phase when selected', () => {
+test('every selected coefficient matches an independent DFT and direct complex sum', () => {
   const sampleRate = 800;
   const length = 100;
   const waves = [
@@ -121,19 +145,34 @@ test('amplitude-ranked FFT sinusoids retain amplitude, frequency and phase when 
   const samples = Float64Array.from({ length }, (_, n) => waves.reduce((sum, wave) =>
     sum + wave.amplitude * Math.cos(2 * Math.PI * wave.frequency * n / sampleRate + wave.phase), 0));
   const { components } = analyze(samples, sampleRate);
-  for (let count = 1; count <= waves.length; count++) {
-    const actualWave = components[count - 1];
-    const expectedWave = waves[count - 1];
-    close(actualWave.amplitude, expectedWave.amplitude);
-    close(actualWave.frequency, expectedWave.frequency);
-    close(actualWave.phase, expectedWave.phase);
+  const coefficients = Array.from({ length }, (_, k) => {
+    let re = 0;
+    let im = 0;
+    for (let n = 0; n < length; n++) {
+      const angle = -2 * Math.PI * k * n / length;
+      re += samples[n] * Math.cos(angle) / length;
+      im += samples[n] * Math.sin(angle) / length;
+    }
+    return { re, im, frequency: (k < length / 2 ? k : k - length) * sampleRate / length };
+  });
+  for (let index = 0; index < length; index++) {
+    const actual = components[index];
+    close(actual.re, coefficients[actual.bin].re);
+    close(actual.im, coefficients[actual.bin].im);
+    if (index) assert.ok(components[index - 1].amplitude >= actual.amplitude);
+  }
+  for (const count of [1, 2, 3, 5, 6, length]) {
     const selected = components.slice(0, count);
     const curve = makeCurve(selected, length, sampleRate);
     for (const index of [0, 23, 1777, curve.segments]) {
       const t = index / curve.segments * length / sampleRate;
-      const expected = waves.slice(0, count).reduce((sum, wave) => {
-        const angle = 2 * Math.PI * wave.frequency * t + wave.phase;
-        return { x: sum.x + wave.amplitude * Math.cos(angle), y: sum.y + wave.amplitude * Math.sin(angle) };
+      const expected = selected.reduce((sum, item) => {
+        const coefficient = coefficients[item.bin];
+        const angle = 2 * Math.PI * coefficient.frequency * t;
+        return {
+          x: sum.x + coefficient.re * Math.cos(angle) - coefficient.im * Math.sin(angle),
+          y: sum.y + coefficient.re * Math.sin(angle) + coefficient.im * Math.cos(angle)
+        };
       }, { x: 0, y: 0 });
       const point = evaluate(selected, t);
       close(point.x, expected.x);
@@ -145,7 +184,7 @@ test('amplitude-ranked FFT sinusoids retain amplitude, frequency and phase when 
 });
 
 test('complex sum uses Hz and seconds without wrapping time or forcing closure', () => {
-  const waves = [{ amplitude: 0.7, frequency: 0.25, phase: 0 }];
+  const waves = [{ re: 0.7, im: 0, frequency: 0.25 }];
   const point = evaluate(waves, 1);
   close(point.x, 0);
   close(point.y, 0.7);
@@ -172,8 +211,10 @@ test('extensible PCM and float WAV decode without resampling ultrasonic content'
     const wav = readWav(asArrayBuffer(wavFixture({ extensible: true, bits: 32, encoding })));
     const samples = Float64Array.from({ length: wav.frames }, (_, index) => wav.sample(index));
     const result = analyze(samples, wav.sampleRate);
-    close(result.components[0].frequency, 40007.8125);
-    close(result.components[0].amplitude, 0.7, 1e-7);
+    for (const frequency of [40007.8125, -40007.8125]) {
+      const component = result.components.find(item => item.frequency === frequency);
+      close(component.amplitude, 0.35, 1e-7);
+    }
   }
 });
 

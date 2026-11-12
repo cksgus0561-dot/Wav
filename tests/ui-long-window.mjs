@@ -45,32 +45,33 @@ try {
     }
     return { colored, yellow, time: Number(canvas.dataset.sourceTime), endpoint: window.drawnEndpoint };
   }, ms);
-  assert.ok((await tick(0)).colored > 1000, 'long preview must be visible');
+  assert.ok((await tick(0)).colored > 200, 'long preview must be visible');
   await control('phase').fill('500');
   let snapshot = await tick(0);
   assert.equal(snapshot.time, 50);
-  assert.ok(snapshot.yellow > 1000, 'long trace must be visible after seeking');
+  assert.ok(snapshot.yellow > 200, 'long trace must be visible after seeking');
   await page.locator('[data-action="all"]').click();
-  assert.equal(await control('countNumber').inputValue(), '2400001');
+  assert.equal(await control('countNumber').inputValue(), '4800000');
   assert.equal(await page.locator('.energy-value').textContent(), '100.00%');
   await control('speed').fill('1');
   await control('speed').press('Enter');
   await page.getByRole('button', { name: '애니메이션 재생', exact: true }).click();
   snapshot = await tick(1000);
   assert.equal(snapshot.time, 1);
-  assert.ok(snapshot.yellow > 1000, 'all-component playback must draw the curve');
+  assert.ok(snapshot.yellow > 200, 'all-component playback must draw the curve');
   assert.ok(Math.abs(snapshot.endpoint.x - Math.fround(value(48000))) < 1e-6, 'all components must reconstruct the input sample');
+  assert.ok(Math.abs(snapshot.endpoint.y) < 1e-6, 'all coefficients must cancel the imaginary part at the source sample');
   await page.getByRole('button', { name: '애니메이션 일시정지', exact: true }).click();
   await page.locator('[data-action="fit"]').click();
   await page.setViewportSize({ width: 1000, height: 750 });
-  assert.ok((await tick(0)).colored > 1000, 'resize must rebuild the cache');
+  assert.ok((await tick(0)).colored > 200, 'resize must rebuild the cache');
   await control('phase').fill('0');
   await control('preview').uncheck();
   await control('circles').uncheck();
   await control('vectors').uncheck();
   assert.ok((await tick(0)).yellow < 100, 'seeking back must clear the previous trace');
   assert.deepEqual(errors, []);
-  console.log('PASS: 100 seconds at 48 kHz, 4,800,000 samples, all 2,400,001 components, visible preview/trace, exact sample reconstruction at 1x, seeking, resize, and no page errors.');
+  console.log('PASS: 100 seconds at 48 kHz, all 4,800,000 coefficients, visible preview/trace, real sample reconstruction and zero imaginary part at 1x, seeking, resize, and no page errors.');
 } finally {
   await browser.close();
 }

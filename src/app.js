@@ -42,7 +42,7 @@ export function mountWaveCurves(root) {
           <p class="inspector-note">진폭이 큰 성분부터 더합니다. 성분 수를 바꾸며 곡선의 변화를 살펴보세요.</p>
           <div class="coefficient-heading"><h3>주요 성분</h3><span>FFT 주파수</span></div>
           <table><thead><tr><th>Hz</th><th>진폭</th><th>위상</th></tr></thead><tbody class="coefficients"></tbody></table>
-          <details><summary>곡선은 어떻게 만들어지나요?</summary><p>WAV에 FFT를 수행해 각 사인파 성분의 진폭·주파수·위상을 구합니다. 각 성분을 A·e^(i(2πft+φ))로 표현하고, 진폭이 큰 순서로 선택한 개수만큼 더합니다. 합의 실수부가 x, 허수부가 y입니다. 끝점도 그 시간의 합으로 계산합니다.</p><p>각 성분의 회전각은 2π × 주파수(Hz) × 구간 내 원본 시간(초) + 초기 위상입니다. 1×에서는 화면 1초 동안 원본 시간도 1초 진행합니다. 같은 배율에서는 구간 길이에 관계없이 같은 주파수가 같은 속도로 회전합니다. 선택 구간의 끝에 도달하면 처음부터 반복합니다.</p><p>빠른 회전을 살펴보려면 재생 배율을 낮추세요. 원 가이드는 진폭이 큰 64개까지 표시합니다. 연결선과 곡선에는 선택한 모든 성분을 반영합니다.</p></details>
+          <details><summary>곡선은 어떻게 만들어지나요?</summary><p>WAV의 FFT 출력 Xₖ를 샘플 수 N으로 나눈 복소 계수 Cₖ를 사용합니다. 양·음 주파수를 모두 유지하고, |Cₖ|가 큰 순서로 선택한 성분의 Cₖ·e^(i2πfₖt)를 더합니다. 합의 실수부가 x, 허수부가 y입니다. 전체 사용은 N개 계수를 모두 포함합니다.</p><p>t는 구간 내 원본 시간(초), fₖ는 부호를 포함한 주파수(Hz)입니다. 1×에서는 화면 1초 동안 원본 시간도 1초 진행합니다. 선택 구간의 끝에 도달하면 처음부터 반복합니다. 실수 WAV의 전체 계수를 합하면 원래 샘플 시점에서 허수부는 수치 오차를 제외하고 0이 됩니다.</p><p>빠른 회전을 살펴보려면 재생 배율을 낮추세요. 원 가이드는 진폭이 큰 64개까지 표시합니다. 연결선과 곡선에는 선택한 모든 성분을 반영합니다.</p></details>
         </aside>
         <section class="source-panel" aria-label="WAV 파형 및 분석 구간">
           <div class="source-heading"><div class="file-description"><span class="file-tag">WAV</span><div><h2 class="file-name">불러오는 중</h2><p class="file-meta">원본 샘플레이트 유지</p></div></div><span class="load-status" role="status" aria-live="polite"></span></div>
@@ -308,7 +308,7 @@ export function mountWaveCurves(root) {
     controls.countNumber.value = String(count);
     controls.countNumber.style.width = `${Math.max(2, String(count).length) + 1}ch`;
     query('.energy-value').textContent = `${(totalEnergy ? usedEnergy / totalEnergy * 100 : 100).toFixed(2)}%`;
-    query('.coefficients').innerHTML = components.slice(0, 6).map(item => `<tr><td>${number.format(item.frequency)}</td><td>${item.amplitude.toFixed(4)}</td><td>${(item.phase * 180 / Math.PI).toFixed(1)}°</td></tr>`).join('');
+    query('.coefficients').innerHTML = components.slice(0, 6).map(item => `<tr><td>${number.format(item.frequency)}</td><td>${item.amplitude.toFixed(4)}</td><td>${(Math.atan2(item.im, item.re) * 180 / Math.PI).toFixed(1)}°</td></tr>`).join('');
     if (totalEnergy < 1e-24) query('.load-status').textContent = '선택 구간이 무음입니다. 곡선은 한 점입니다.';
     else query('.load-status').textContent = '분석 완료';
     sourceTime = 0;
@@ -782,9 +782,11 @@ export function mountWaveCurves(root) {
           context.lineWidth = 0.8 / scale;
           context.stroke();
         }
-        const angle = TAU * component.frequency * sourceTime + component.phase;
-        x += component.amplitude * Math.cos(angle);
-        y += component.amplitude * Math.sin(angle);
+        const angle = TAU * component.frequency * sourceTime;
+        const cosine = Math.cos(angle);
+        const sine = Math.sin(angle);
+        x += component.re * cosine - component.im * sine;
+        y += component.re * sine + component.im * cosine;
         // All components are summed. Only visually subpixel chain segments
         // are coalesced; this does not change the endpoint or the curve.
         if (controls.vectors.checked && Math.hypot(x - chainX, y - chainY) * scale >= 0.25) {

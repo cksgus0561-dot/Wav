@@ -41,15 +41,18 @@ try {
     return {
       time: Number(document.querySelector('.curve-canvas').dataset.sourceTime),
       phase: Number(document.querySelector('.curve-canvas').dataset.phase),
-      endpoint: window.drawnEndpoint
+      endpoint: window.drawnEndpoint,
+      displayedFrequency: Number(document.querySelector('.coefficients tr td').textContent.replaceAll(',', ''))
     };
   }, milliseconds);
   const play = () => page.getByRole('button', { name: '애니메이션 재생', exact: true }).click();
   const pause = () => page.getByRole('button', { name: '애니메이션 일시정지', exact: true }).click();
   const checkPoint = (snapshot, time, frequency = 8) => {
     close(snapshot.time, time);
-    close(snapshot.endpoint.x, 0.6 * Math.cos(2 * Math.PI * frequency * time));
-    close(snapshot.endpoint.y, 0.6 * Math.sin(2 * Math.PI * frequency * time));
+    assert.ok(Math.abs(Math.abs(snapshot.displayedFrequency) - frequency) < 0.0051);
+    const signedFrequency = Math.sign(snapshot.displayedFrequency) * frequency;
+    close(snapshot.endpoint.x, 0.3 * Math.cos(2 * Math.PI * signedFrequency * time));
+    close(snapshot.endpoint.y, 0.3 * Math.sin(2 * Math.PI * signedFrequency * time));
   };
 
   for (const sampleRate of [1024, 2048]) {
@@ -63,7 +66,7 @@ try {
       await control('duration').fill(String(length / sampleRate));
       await control('duration').press('Tab');
       await control('count').fill('1');
-      assert.match(await page.locator('.coefficients tr').first().textContent(), /^8/);
+      assert.match(await page.locator('.coefficients tr').first().textContent(), /^-?8/);
       const coefficients = await page.locator('.coefficients').innerHTML();
       const selection = await control('start').inputValue();
       await setSpeed('1');
@@ -139,7 +142,7 @@ try {
     assert.equal(Math.round(await value('start') * sampleRate), start);
     assert.equal(Math.round(await value('end') * sampleRate), start + samples);
     assert.equal(Math.round(await value('duration') * sampleRate), samples);
-    assert.equal(Number(await control('count').getAttribute('max')), Math.floor(samples / 2) + 1);
+    assert.equal(Number(await control('count').getAttribute('max')), samples);
     assert.match(await page.locator('.window-info').textContent(), new RegExp(`^${samples.toLocaleString('ko-KR')}개 샘플`));
   };
   await setNumber('duration', 0.10002);
@@ -241,6 +244,33 @@ try {
   await control('count').fill('2');
   await tick(0);
   assert.ok(await yellowPixels() < 100, 'changing the synthesis must reset the old trace');
+
+  // Nonzero real/imaginary FFT coefficients must reach the renderer unchanged.
+  // One selected coefficient rotates with half the real tone's amplitude;
+  // selecting its conjugate too gives the real signal, without a synthetic y.
+  await control('file').setInputFiles({
+    name: 'complex-coefficients.wav', mimeType: 'audio/wav',
+    buffer: wavFixture({ encoding: 3, bits: 64, sampleRate: 1024, frames: 32,
+      value: n => 0.8 * Math.cos(2 * Math.PI * 3 * n / 32 + 0.7) })
+  });
+  await page.waitForFunction(() => document.querySelector('.file-name').textContent === 'complex-coefficients.wav');
+  await control('duration').fill(String(32 / 1024));
+  await control('duration').press('Tab');
+  for (const count of [1, 2, 32]) {
+    await control('count').fill(String(count));
+    for (const position of [0, 125, 333, 750, 1000]) {
+      await control('phase').fill(String(position));
+      const state = await tick(0);
+      const angle = 2 * Math.PI * 96 * state.time + 0.7;
+      if (count === 1) {
+        close(state.endpoint.x, 0.4 * Math.cos(angle));
+        close(state.endpoint.y, Math.sign(state.displayedFrequency) * 0.4 * Math.sin(angle));
+      } else {
+        close(state.endpoint.x, 0.8 * Math.cos(angle));
+        close(state.endpoint.y, 0);
+      }
+    }
+  }
 
   await control('file').setInputFiles({
     name: 'one-sample.wav', mimeType: 'audio/wav',

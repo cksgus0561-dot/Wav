@@ -90,24 +90,21 @@ function radix2(real, imaginary, inverse = false) {
   }
 }
 
-// One rotating complex component per real sinusoid. A real sinusoid's FFT
-// coefficient pair carries half its amplitude on each side; recover that
-// amplitude with 2/N. DC and the unpaired even-N Nyquist bin use 1/N.
+// Keep every FFT coefficient, with the same 1/N normalization for every bin.
+// Magnitude is metadata for sorting and display; synthesis uses re/im directly.
 export function analyze(samples, sampleRate) {
   const real = Float64Array.from(samples);
   const imaginary = new Float64Array(samples.length);
   fft(real, imaginary);
   const components = [];
-  for (let bin = 0; bin <= Math.floor(samples.length / 2); bin++) {
-    const isNyquist = samples.length % 2 === 0 && bin === samples.length / 2;
-    const scale = (bin === 0 || isNyquist ? 1 : 2) / samples.length;
-    const re = real[bin] * scale;
-    const im = imaginary[bin] * scale;
+  for (let bin = 0; bin < samples.length; bin++) {
+    const harmonic = bin < Math.ceil(samples.length / 2) ? bin : bin - samples.length;
+    const re = real[bin] / samples.length;
+    const im = imaginary[bin] / samples.length;
     components.push({
-      bin, re, im,
+      bin, harmonic, re, im,
       amplitude: Math.hypot(re, im),
-      phase: Math.atan2(im, re),
-      frequency: bin * sampleRate / samples.length
+      frequency: harmonic * sampleRate / samples.length
     });
   }
   components.sort((a, b) => b.amplitude - a.amplitude || a.bin - b.bin);
@@ -121,8 +118,9 @@ export function makeCurve(components, sampleLength, sampleRate) {
   const real = new Float64Array(length + 1);
   const imaginary = new Float64Array(length + 1);
   for (const component of components) {
-    real[component.bin] = component.re * length;
-    imaginary[component.bin] = component.im * length;
+    const gridBin = component.harmonic < 0 ? length + component.harmonic : component.harmonic;
+    real[gridBin] = component.re * length;
+    imaginary[gridBin] = component.im * length;
   }
   // Evaluate the same exponential sum efficiently on an evenly spaced grid.
   fft(real.subarray(0, length), imaginary.subarray(0, length), true);
@@ -138,9 +136,11 @@ export function evaluate(components, timeSeconds) {
   let x = 0;
   let y = 0;
   for (const component of components) {
-    const angle = 2 * Math.PI * component.frequency * timeSeconds + component.phase;
-    x += component.amplitude * Math.cos(angle);
-    y += component.amplitude * Math.sin(angle);
+    const angle = 2 * Math.PI * component.frequency * timeSeconds;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    x += component.re * cosine - component.im * sine;
+    y += component.re * sine + component.im * cosine;
   }
   return { x, y };
 }

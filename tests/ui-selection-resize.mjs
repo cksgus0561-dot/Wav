@@ -46,7 +46,7 @@ try {
   await setup();
   let s=await dragEdge('end',1);
   assert.equal(s.start,2000);near(s.end,5000);
-  assert.equal(Number(await control('count').getAttribute('max')),Math.floor(s.length/2)+1);
+  assert.equal(Number(await control('count').getAttribute('max')),s.length);
   const fixedEnd=s.end;
   s=await dragEdge('start',1);
   near(s.start,3000);assert.equal(s.end,fixedEnd);
