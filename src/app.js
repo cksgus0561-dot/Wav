@@ -23,7 +23,12 @@ export function mountWaveCurves(root) {
           <div class="canvas-heading"><div><h1>파동이 그리는 곡선</h1><p>파동의 복소수 합 <span> / </span> x · 실수부, y · 허수부</p></div><div class="time-readout"><output class="source-time" aria-label="선택 구간 내 원본 시간"></output><span class="phase-label">0.0%</span></div></div>
           <div class="plot"><canvas class="curve-canvas" aria-label="푸리에 성분을 합성한 평면 곡선"></canvas></div>
           <div class="plot-toolbar">
-            <div class="toggles"><label><input type="checkbox" data-control="circles" checked>회전 원</label><label><input type="checkbox" data-control="vectors" checked>연결선</label><label><input type="checkbox" data-control="preview" checked>전체 곡선</label></div>
+            <div class="toggles">
+              <label><input type="checkbox" data-control="circles" checked>회전 원</label>
+              <label><input type="checkbox" data-control="vectors" checked>연결선</label>
+              <label><input type="checkbox" data-control="preview" checked>전체 곡선</label>
+              <label><input type="checkbox" data-control="endpoint" checked>노란 점</label>
+            </div>
             <button class="quiet" data-action="fit">화면 맞춤</button>
           </div>
           <div class="transport">
@@ -822,14 +827,16 @@ export function mountWaveCurves(root) {
           context.stroke();
         }
       }
-      context.save();
-      context.translate(originX, originY);
-      context.scale(scale, -scale);
-      context.fillStyle = '#fff4bc';
-      context.beginPath();
-      context.arc(x, y, 3.2 / scale, 0, TAU);
-      context.fill();
-      context.restore();
+      if (controls.endpoint.checked) {
+        context.save();
+        context.translate(originX, originY);
+        context.scale(scale, -scale);
+        context.fillStyle = '#fff4bc';
+        context.beginPath();
+        context.arc(x, y, 3.2 / scale, 0, TAU);
+        context.fill();
+        context.restore();
+      }
       controls.phase.value = String(Math.round(phase * 1000));
       query('.phase-label').textContent = `${(phase * 100).toFixed(1)}%`;
       query('.source-time').textContent = `${sourceTime.toFixed(6)} / ${duration.toFixed(6)} s`;
